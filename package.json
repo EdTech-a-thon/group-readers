@@ -1,0 +1,22 @@
+{
+  "name": "book-club-groups",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 8000",
+    "build": "vite build",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
+    "start": "./pocketbase serve --http=0.0.0.0:8000"
+  },
+  "dependencies": {
+    "@sveltejs/vite-plugin-svelte": "latest",
+    "pocketbase": "latest",
+    "svelte": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@tsconfig/svelte": "latest",
+    "svelte-check": "latest",
+    "typescript": "5.9.3"
+  }
+}

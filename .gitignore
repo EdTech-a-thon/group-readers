@@ -13,3 +13,10 @@ dist
 
 # Finder (MacOS) folder config
 .DS_Store
+node_modules/
+pb_data/
+pb_public/
+pocketbase
+*.zip
+.env
+*.log
