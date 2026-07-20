@@ -1,16 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import BookEditor from "./BookEditor.svelte";
+  import GroupBuilder from "./GroupBuilder.svelte";
   import { coverUrl, errorMessage, pb, type Book } from "./lib";
 
   let { onSignOut }: { onSignOut: () => void } = $props();
   let books = $state<Book[]>([]);
   let submissions = $state<any[]>([]);
+  let savedPlan = $state<any>();
   let loading = $state(true);
   let error = $state("");
   let copied = $state(false);
   let clearing = $state(false);
-  let view = $state<"books" | "results">("books");
+  let view = $state<"books" | "results" | "groups">("books");
 
   const username = pb.authStore.record?.username || "Teacher";
   const shareToken = pb.authStore.record?.shareToken || "";
@@ -23,12 +25,14 @@
   async function loadAll() {
     error = "";
     try {
-      const [bookRecords, responseRecords] = await Promise.all([
+      const [bookRecords, responseRecords, planRecords] = await Promise.all([
         pb.collection("books").getFullList({ sort: "position" }),
         pb.collection("submissions").getFullList({ sort: "firstName,lastInitial", expand: "choices" }),
+        pb.collection("grouping_plans").getFullList(),
       ]);
       books = bookRecords as unknown as Book[];
       submissions = responseRecords;
+      savedPlan = planRecords[0];
     } catch (caught) {
       error = errorMessage(caught);
     } finally {
@@ -48,6 +52,7 @@
     try {
       await pb.send("/api/bookclub/clear", { method: "POST" });
       submissions = [];
+      savedPlan = undefined;
       view = "books";
     } catch (caught) {
       error = errorMessage(caught);
@@ -86,6 +91,7 @@
   <nav class="dashboard-tabs" aria-label="Dashboard sections">
     <button class:active={view === "books"} onclick={() => (view = "books")}>Book list <span>{books.length}/10</span></button>
     <button class:active={view === "results"} onclick={() => (view = "results")}>Student choices <span>{submissions.length}</span></button>
+    <button class:active={view === "groups"} onclick={() => (view = "groups")}>Create groups <span>{savedPlan ? "✓" : ""}</span></button>
   </nav>
 
   {#if error}<p class="message error" role="alert">{error}</p>{/if}
@@ -111,7 +117,7 @@
         <div class="share-actions"><input value={shareUrl} readonly aria-label="Student link" /><button class="button accent" onclick={copyLink}>{copied ? "Copied!" : "Copy link"}</button></div>
       {/if}
     </aside>
-  {:else}
+  {:else if view === "results"}
     <section class="results-head">
       <div><p class="eyebrow">Class responses</p><h2>{submissions.length} {submissions.length === 1 ? "student has" : "students have"} ranked their books</h2></div>
       {#if submissions.length}<button class="button danger subtle" disabled={clearing} onclick={clearResponses}>{clearing ? "Clearing…" : "Clear all responses"}</button>{/if}
@@ -142,5 +148,7 @@
         </table>
       </div>
     {/if}
+  {:else}
+    <GroupBuilder {books} {submissions} {savedPlan} onSaved={loadAll} />
   {/if}
 </main>

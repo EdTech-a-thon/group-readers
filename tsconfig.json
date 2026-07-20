@@ -3,6 +3,7 @@
   "compilerOptions": {
     "allowJs": true,
     "checkJs": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "moduleResolution": "bundler"
   },
   "include": ["src/**/*.ts", "src/**/*.svelte", "src/**/*.js"]
