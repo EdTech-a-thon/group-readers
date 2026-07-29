@@ -1,12 +1,13 @@
 <script lang="ts">
-  import { coverUrl, errorMessage, pb, type Book } from "./lib";
+  import { coverUrl, errorMessage, shrinkCover, supabase, type Book } from "./lib";
 
   let {
     position,
     book,
+    teacherId,
     locked,
     onSaved,
-  }: { position: number; book?: Book; locked: boolean; onSaved: () => void } = $props();
+  }: { position: number; book?: Book; teacherId: string; locked: boolean; onSaved: () => void } = $props();
 
   let editing = $state(false);
   let title = $state("");
@@ -73,19 +74,39 @@
     }
     busy = true;
     error = "";
+    let uploadedPath = "";
     try {
-      const data = new FormData();
-      data.set("teacher", pb.authStore.record!.id);
-      data.set("position", String(position));
-      data.set("title", title.trim());
-      data.set("blurb", blurb.trim());
-      if (cover) data.set("cover", cover);
-      if (book) await pb.collection("books").update(book.id, data);
-      else await pb.collection("books").create(data);
+      // The cover image is stored separately from the book's details, so it is
+      // uploaded first and the book row then points at it.
+      if (cover) {
+        uploadedPath = `${teacherId}/${crypto.randomUUID()}.webp`;
+        const { error: uploadFailed } = await supabase.storage
+          .from("covers")
+          .upload(uploadedPath, await shrinkCover(cover), { contentType: "image/webp" });
+        if (uploadFailed) throw uploadFailed;
+      }
+
+      const details = {
+        teacher: teacherId,
+        position,
+        title: title.trim(),
+        blurb: blurb.trim(),
+        ...(uploadedPath ? { cover: uploadedPath } : {}),
+      };
+      const { error: saveFailed } = book
+        ? await supabase.from("books").update(details).eq("id", book.id)
+        : await supabase.from("books").insert(details);
+      if (saveFailed) throw saveFailed;
+
+      // Only once the new cover is definitely in use can the old one go.
+      if (uploadedPath && book?.cover) {
+        await supabase.storage.from("covers").remove([book.cover]);
+      }
       editing = false;
       cover = null;
       onSaved();
     } catch (caught) {
+      if (uploadedPath) await supabase.storage.from("covers").remove([uploadedPath]);
       error = errorMessage(caught);
     } finally {
       busy = false;

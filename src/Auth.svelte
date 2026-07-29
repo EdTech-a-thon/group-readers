@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { errorMessage, pb } from "./lib";
+  import { errorMessage, supabase } from "./lib";
 
   let { onSignIn }: { onSignIn: () => void } = $props();
   let mode: "signin" | "signup" = $state("signin");
-  let username = $state("");
+  let email = $state("");
+  let displayName = $state("");
   let password = $state("");
   let confirmPassword = $state("");
   let busy = $state(false);
@@ -19,15 +20,17 @@
 
     busy = true;
     try {
-      if (mode === "signup") {
-        await pb.collection("teachers").create({
-          username: username.trim().toLowerCase(),
-          email: `${username.trim().toLowerCase()}.${crypto.randomUUID()}@teachers.bookclub.local`,
-          password,
-          passwordConfirm: confirmPassword,
-        });
-      }
-      await pb.collection("teachers").authWithPassword(username.trim(), password);
+      const credentials = { email: email.trim(), password };
+      const { data, error: caught } =
+        mode === "signup"
+          ? await supabase.auth.signUp({
+              ...credentials,
+              options: { data: { username: displayName.trim() } },
+            })
+          : await supabase.auth.signInWithPassword(credentials);
+
+      if (caught) throw caught;
+      if (!data.session) throw new Error("We could not sign you in. Please try again.");
       onSignIn();
     } catch (caught) {
       error = errorMessage(caught);
@@ -77,9 +80,16 @@
 
       <form onsubmit={submit}>
         <label>
-          Username
-          <input bind:value={username} autocomplete="username" minlength="3" maxlength="30" required placeholder="e.g. msrivera" />
+          Email
+          <input bind:value={email} type="email" autocomplete="email" required placeholder="you@school.org" />
         </label>
+        {#if mode === "signup"}
+          <label>
+            Display name
+            <input bind:value={displayName} autocomplete="name" minlength="3" maxlength="30" required placeholder="e.g. Ms Rivera" />
+            <small class="field-hint">Your students see this name on their ranking page.</small>
+          </label>
+        {/if}
         <label>
           Password
           <input bind:value={password} type="password" autocomplete={mode === "signup" ? "new-password" : "current-password"} minlength="8" required placeholder="At least 8 characters" />
@@ -95,7 +105,7 @@
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create my account"}
         </button>
       </form>
-      <p class="fine-print">Teacher accounts are private. Students never need an account.</p>
+      <p class="fine-print">Your email is only used to sign you in. Students never need an account.</p>
     </div>
   </section>
 </main>

@@ -2,9 +2,12 @@
   import { onMount } from "svelte";
   import BookEditor from "./BookEditor.svelte";
   import GroupBuilder from "./GroupBuilder.svelte";
-  import { coverUrl, errorMessage, pb, type Book } from "./lib";
+  import { coverUrl, errorMessage, supabase, type Book } from "./lib";
 
   let { onSignOut }: { onSignOut: () => void } = $props();
+  let teacherId = $state("");
+  let username = $state("Teacher");
+  let shareToken = $state("");
   let books = $state<Book[]>([]);
   let submissions = $state<any[]>([]);
   let savedPlan = $state<any>();
@@ -17,9 +20,7 @@
   let clearingBooks = $state(false);
   let view = $state<"books" | "results" | "groups">("books");
 
-  const username = pb.authStore.record?.username || "Teacher";
-  const shareToken = pb.authStore.record?.shareToken || "";
-  const shareUrl = `${window.location.origin}/student/${shareToken}`;
+  const shareUrl = $derived(`${window.location.origin}/student/${shareToken}`);
   const locked = $derived(submissions.length > 0);
   const complete = $derived(books.length === 10);
 
@@ -28,14 +29,27 @@
   async function loadAll() {
     error = "";
     try {
-      const [bookRecords, responseRecords, planRecords] = await Promise.all([
-        pb.collection("books").getFullList({ sort: "position" }),
-        pb.collection("submissions").getFullList({ sort: "firstName,lastInitial", expand: "choices" }),
-        pb.collection("grouping_plans").getFullList(),
+      const [teacher, bookRows, responseRows, planRows] = await Promise.all([
+        supabase.from("teachers").select("id, username, shareToken:share_token").single(),
+        supabase.from("books").select("id, position, title, blurb, cover").order("position"),
+        supabase
+          .from("submissions")
+          .select("id, firstName:first_name, lastInitial:last_initial, choices")
+          .order("first_name")
+          .order("last_initial"),
+        supabase.from("grouping_plans").select("settings, result"),
       ]);
-      books = bookRecords as unknown as Book[];
-      submissions = responseRecords;
-      savedPlan = planRecords[0];
+
+      for (const response of [teacher, bookRows, responseRows, planRows]) {
+        if (response.error) throw response.error;
+      }
+
+      teacherId = teacher.data!.id;
+      username = teacher.data!.username;
+      shareToken = teacher.data!.shareToken;
+      books = (bookRows.data || []) as Book[];
+      submissions = responseRows.data || [];
+      savedPlan = planRows.data?.[0];
     } catch (caught) {
       error = errorMessage(caught);
     } finally {
@@ -53,7 +67,8 @@
     if (!confirm("Clear every student response? This cannot be undone.")) return;
     clearing = true;
     try {
-      await pb.send("/api/bookclub/clear", { method: "POST" });
+      const { error: caught } = await supabase.rpc("clear_responses");
+      if (caught) throw caught;
       submissions = [];
       savedPlan = undefined;
       view = "books";
@@ -73,7 +88,8 @@
     error = "";
     addingRandom = true;
     try {
-      await pb.send("/api/bookclub/random-responses", { method: "POST", body: { count } });
+      const { error: caught } = await supabase.rpc("add_random_responses", { response_count: count });
+      if (caught) throw caught;
       await loadAll();
     } catch (caught) {
       error = errorMessage(caught);
@@ -87,7 +103,10 @@
     clearingBooks = true;
     error = "";
     try {
-      await Promise.all(books.map((book) => pb.collection("books").delete(book.id)));
+      const covers = books.map((book) => book.cover).filter(Boolean);
+      const { error: caught } = await supabase.from("books").delete().eq("teacher", teacherId);
+      if (caught) throw caught;
+      if (covers.length) await supabase.storage.from("covers").remove(covers);
       books = [];
       savedPlan = undefined;
     } catch (caught) {
@@ -145,7 +164,7 @@
     {/if}
     <section class="editor-list">
       {#each Array(10) as _, index}
-        <BookEditor position={index + 1} book={books.find((book) => book.position === index + 1)} {locked} onSaved={loadAll} />
+        <BookEditor position={index + 1} book={books.find((book) => book.position === index + 1)} {teacherId} {locked} onSaved={loadAll} />
       {/each}
     </section>
 

@@ -3,14 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 8000",
-    "build": "vite build",
-    "check": "svelte-check --tsconfig ./tsconfig.json",
-    "start": "./pocketbase serve --http=0.0.0.0:8000"
+    "dev": "bunx --bun vite --host 0.0.0.0 --port 8000",
+    "build": "bunx --bun vite build",
+    "check": "bun node_modules/svelte-check/bin/svelte-check --tsconfig ./tsconfig.json",
+    "start": "bunx --bun vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.111.0",
     "@sveltejs/vite-plugin-svelte": "latest",
-    "pocketbase": "latest",
     "svelte": "latest",
     "vite": "latest"
   },

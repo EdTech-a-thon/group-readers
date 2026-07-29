@@ -3,30 +3,26 @@
   import Auth from "./Auth.svelte";
   import Dashboard from "./Dashboard.svelte";
   import StudentRanking from "./StudentRanking.svelte";
-  import { pb } from "./lib";
+  import { supabase } from "./lib";
 
   let ready = $state(false);
-  let authenticated = $state(pb.authStore.isValid);
+  let authenticated = $state(false);
   const studentMatch = window.location.pathname.match(/^\/student\/([A-Za-z0-9_-]+)\/?$/);
 
-  onMount(async () => {
-    if (authenticated) {
-      try {
-        await pb.collection("teachers").authRefresh();
-      } catch {
-        pb.authStore.clear();
-        authenticated = false;
-      }
-    }
-    ready = true;
+  onMount(() => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      authenticated = Boolean(session);
+      ready = true;
+    });
+    return () => data.subscription.unsubscribe();
   });
 
   function signedIn() {
     authenticated = true;
   }
 
-  function signedOut() {
-    pb.authStore.clear();
+  async function signedOut() {
+    await supabase.auth.signOut();
     authenticated = false;
   }
 </script>

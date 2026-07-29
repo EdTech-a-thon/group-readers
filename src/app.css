@@ -31,6 +31,7 @@ a { color: inherit; }
 .button.full { width: 100%; }
 .button-row { display: flex; gap: .4rem; }
 label { display: grid; gap: .42rem; color: #33443f; font-size: .83rem; font-weight: 700; }
+.field-hint { color: var(--muted); font-size: .76rem; font-weight: 400; }
 input, textarea { width: 100%; color: var(--ink); background: white; border: 1px solid #cbcfc9; border-radius: 7px; padding: .78rem .85rem; outline: none; resize: vertical; }
 input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3px rgba(36,89,75,.11); }
 .message { border-radius: 7px; padding: .75rem .9rem; font-size: .87rem; }

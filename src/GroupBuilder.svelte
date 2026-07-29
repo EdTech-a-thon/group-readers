@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createGroups, type GroupingResult, type GroupingSettings, type GroupingStrategy } from "./grouping";
-  import { coverUrl, errorMessage, pb, type Book } from "./lib";
+  import { coverUrl, errorMessage, supabase, type Book } from "./lib";
 
   let {
     books,
@@ -72,7 +72,11 @@
     saving = true;
     error = "";
     try {
-      await pb.send("/api/bookclub/groups", { method: "POST", body: { settings: settings(), result: draft } });
+      const { error: caught } = await supabase.rpc("save_groups", {
+        plan_settings: settings(),
+        plan_result: draft,
+      });
+      if (caught) throw caught;
       draftIsSaved = true;
       onSaved();
     } catch (caught) {

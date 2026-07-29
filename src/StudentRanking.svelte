@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { coverUrl, errorMessage, pb, type Book } from "./lib";
+  import { coverUrl, errorMessage, supabase, type Book } from "./lib";
 
   let { token }: { token: string } = $props();
   let books = $state<Book[]>([]);
@@ -15,7 +15,8 @@
 
   onMount(async () => {
     try {
-      const data = await pb.send(`/api/bookclub/student/${token}`, {});
+      const { data, error: caught } = await supabase.rpc("student_view", { token });
+      if (caught) throw caught;
       books = data.books;
       teacher = data.teacher;
     } catch (caught) {
@@ -40,10 +41,13 @@
     }
     busy = true;
     try {
-      await pb.send(`/api/bookclub/student/${token}`, {
-        method: "POST",
-        body: { firstName, lastInitial, choices },
+      const { error: caught } = await supabase.rpc("student_submit", {
+        token,
+        student_first_name: firstName,
+        student_last_initial: lastInitial,
+        book_choices: choices,
       });
+      if (caught) throw caught;
       submitted = true;
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) {
