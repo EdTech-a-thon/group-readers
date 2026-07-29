@@ -17,27 +17,27 @@
 -- live in Authentication → Users and are not touched.
 -- ---------------------------------------------------------------------------
 
-drop table if exists public.grouping_plans, public.submissions, public.books,
-  public.book_lists, public.teachers cascade;
-drop function if exists public.handle_new_user() cascade;
-drop function if exists public.teachers_keep_identity() cascade;
-drop function if exists public.teachers_keep_share_token() cascade;
-drop function if exists public.book_lists_guard() cascade;
-drop function if exists public.books_guard() cascade;
-drop function if exists public.new_share_token() cascade;
-drop function if exists public.student_view(text);
-drop function if exists public.student_submit(text, text, text, uuid[]);
-drop function if exists public.remove_book(uuid);
-drop function if exists public.clear_responses();
-drop function if exists public.clear_responses(uuid);
-drop function if exists public.add_random_responses(integer);
-drop function if exists public.add_random_responses(uuid, integer);
-drop function if exists public.save_groups(jsonb, jsonb);
-drop function if exists public.save_groups(uuid, jsonb, jsonb);
-drop policy if exists covers_public_read on storage.objects;
-drop policy if exists covers_insert_own on storage.objects;
-drop policy if exists covers_update_own on storage.objects;
-drop policy if exists covers_delete_own on storage.objects;
+-- drop table if exists public.grouping_plans, public.submissions, public.books,
+--   public.book_lists, public.teachers cascade;
+-- drop function if exists public.handle_new_user() cascade;
+-- drop function if exists public.teachers_keep_identity() cascade;
+-- drop function if exists public.teachers_keep_share_token() cascade;
+-- drop function if exists public.book_lists_guard() cascade;
+-- drop function if exists public.books_guard() cascade;
+-- drop function if exists public.new_share_token() cascade;
+-- drop function if exists public.student_view(text);
+-- drop function if exists public.student_submit(text, text, text, uuid[]);
+-- drop function if exists public.remove_book(uuid);
+-- drop function if exists public.clear_responses();
+-- drop function if exists public.clear_responses(uuid);
+-- drop function if exists public.add_random_responses(integer);
+-- drop function if exists public.add_random_responses(uuid, integer);
+-- drop function if exists public.save_groups(jsonb, jsonb);
+-- drop function if exists public.save_groups(uuid, jsonb, jsonb);
+-- drop policy if exists covers_public_read on storage.objects;
+-- drop policy if exists covers_insert_own on storage.objects;
+-- drop policy if exists covers_update_own on storage.objects;
+-- drop policy if exists covers_delete_own on storage.objects;
 
 create extension if not exists pgcrypto with schema extensions;
 
@@ -564,6 +564,13 @@ declare
     'Quinn', 'Riley', 'Sage', 'Taylor'
   ];
   book_ids uuid[];
+  -- One appeal figure per book, in the same order as book_ids. A real class does
+  -- not spread itself evenly over the shelf: a couple of books are the ones
+  -- everybody wants and a couple are the ones nobody reaches for. Appeal is how
+  -- much more or less likely a book is to be chosen than an average one, and it
+  -- is drawn once per batch so every make-believe student in that batch agrees
+  -- about which books are the popular ones.
+  appeal   double precision[];
   picked   uuid[];
   wanted   integer;
   made     integer;
@@ -585,10 +592,20 @@ begin
     raise exception 'Add at least % books before creating test responses.', wanted;
   end if;
 
+  -- 2 ^ (a number from -1 to 1): half as likely as average at worst, twice as
+  -- likely at best, with the middling books far commoner than either extreme.
+  select array_agg(power(2.0, 2 * random() - 1) order by ordinality) into appeal
+    from unnest(book_ids) with ordinality as b(id, ordinality);
+
   for made in 1 .. response_count loop
+    -- Draws "wanted" books without repeats, each book's chance of coming out
+    -- next set by its appeal. Raising a random number to the power of one over
+    -- the appeal does that: a sought-after book lands nearer the top of the pile
+    -- more often, so it is both picked more and ranked higher, while an unpopular
+    -- one still shows up now and then.
     with shuffled as (
-      select id, row_number() over (order by random()) as slot
-        from unnest(book_ids) as id
+      select b.id, row_number() over (order by power(random(), 1.0 / b.appeal) desc) as slot
+        from unnest(book_ids, appeal) as b(id, appeal)
     )
     select array_agg(id order by slot) into picked from shuffled where slot <= wanted;
 

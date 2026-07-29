@@ -172,6 +172,8 @@ input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3p
 .generate-bar div { display: grid; gap: .25rem; }
 .generate-bar span { color: #c5d5cf; font-size: .77rem; }
 .group-results { padding-top: .3rem; border-top: 1px solid var(--line); }
+.result-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: .5rem; }
+.export-note { margin: -1.2rem 0 1.2rem; color: var(--muted); font-size: .8rem; }
 /* One tile per place in the ranking, plus one for the students left over, so the
    row has to hold anywhere from three tiles to eleven. */
 .placement-summary { display: grid; grid-template-columns: repeat(auto-fill, minmax(135px, 1fr)); gap: .6rem; margin-bottom: 1rem; }

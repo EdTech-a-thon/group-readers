@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { downloadGroups } from "./export";
   import { createGroups, type GroupingResult, type GroupingSettings, type GroupingStrategy } from "./grouping";
   import { coverUrl, errorMessage, ordinal, supabase, type Book } from "./lib";
 
@@ -7,6 +8,7 @@
     submissions,
     savedPlan,
     listId,
+    listName,
     rankedBooks,
     onSaved,
   }: {
@@ -14,6 +16,7 @@
     submissions: any[];
     savedPlan?: any;
     listId: string;
+    listName: string;
     // How many books each of these students ranked, so the lowest rank a
     // placement can carry.
     rankedBooks: number;
@@ -139,7 +142,14 @@
 
   {#if draft}
     <section class="group-results">
-      <div class="results-head"><div><p class="eyebrow">{draftIsSaved ? "Confirmed result" : "Draft result"}</p><h2>{draft.placed} of {submissions.length} students placed</h2></div>{#if !draftIsSaved}<button class="button accent" disabled={saving} onclick={save}>{saving ? "Saving…" : "Confirm and save groups"}</button>{/if}</div>
+      <div class="results-head">
+        <div><p class="eyebrow">{draftIsSaved ? "Confirmed result" : "Draft result"}</p><h2>{draft.placed} of {submissions.length} students placed</h2></div>
+        <div class="result-actions">
+          <button class="button subtle" onclick={() => downloadGroups(draft!, books, listName)}>Export spreadsheet</button>
+          {#if !draftIsSaved}<button class="button accent" disabled={saving} onclick={save}>{saving ? "Saving…" : "Confirm and save groups"}</button>{/if}
+        </div>
+      </div>
+      <p class="export-note">The spreadsheet opens in Excel or Google Sheets, one row per student, so you can move anybody between groups by hand.</p>
       <div class="placement-summary">
         {#each draft.rankCounts as count, index}<span><strong>{count}</strong>{ordinal(index + 1)} choice</span>{/each}
         <span class:attention={draft.unplaced.length > 0}><strong>{draft.unplaced.length}</strong>need help</span>

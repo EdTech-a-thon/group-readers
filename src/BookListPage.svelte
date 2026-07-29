@@ -362,7 +362,7 @@
         </div>
       {/if}
     {:else}
-      <GroupBuilder {books} {submissions} {savedPlan} {listId} {rankedBooks} onSaved={load} />
+      <GroupBuilder {books} {submissions} {savedPlan} {listId} listName={list?.name || "Book list"} {rankedBooks} onSaved={load} />
     {/if}
   {/if}
 </main>
