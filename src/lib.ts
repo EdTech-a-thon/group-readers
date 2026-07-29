@@ -12,6 +12,8 @@ export type BookList = {
   name: string;
   // A private note on the teacher's dashboard, telling one list from another.
   description: string;
+  // How many books every student on this list ranks, chosen by the teacher.
+  rankedBooks: number;
   shareToken: string;
 };
 
@@ -25,7 +27,8 @@ export type Book = {
   list?: string;
 };
 
-export const bookListColumns = "id, name, description, shareToken:share_token";
+export const bookListColumns =
+  "id, name, description, rankedBooks:ranked_books, shareToken:share_token";
 
 // The app has no router: the address bar decides which page is showing. Pushing
 // a URL and then raising the same event the Back button raises means both
@@ -39,11 +42,20 @@ export function studentLink(list: BookList) {
   return `${window.location.origin}/student/${list.shareToken}`;
 }
 
-// A teacher decides how long their list is. Students rank four books, so four is
-// the point at which a list becomes usable, and thirty is where the database
-// stops accepting more.
-export const minimumBooks = 4;
+// A teacher decides both how many books their students rank and how long the
+// list is. A list becomes usable once it holds a book for every place in the
+// ranking, and thirty is where the database stops accepting more.
+export const minimumRankedBooks = 2;
+export const maximumRankedBooks = 10;
 export const maximumBooks = 30;
+
+// 1st, 2nd, 3rd, 4th — one label for each place in a ranking.
+export function ordinal(place: number) {
+  const teens = place % 100;
+  const suffix =
+    teens >= 11 && teens <= 13 ? "th" : ["th", "st", "nd", "rd"][place % 10] || "th";
+  return `${place}${suffix}`;
+}
 
 export function coverUrl(book: Book) {
   if (!book.cover) return "";
@@ -67,16 +79,18 @@ export async function deleteBook(book: Book) {
 
 // Sets up a new book list holding copies of another list's books, so a teacher
 // only types the titles, descriptions, and covers once however many classes they
-// teach. Each copy gets its own cover image file, so editing or clearing one
-// list never disturbs the other.
+// teach. The copy asks its students to rank as many books as the original did.
+// Each copy gets its own cover image file, so editing or clearing one list never
+// disturbs the other.
 export async function duplicateBookList(
   teacherId: string,
+  source: BookList,
   details: { name: string; description: string },
   sourceBooks: Book[],
 ) {
   const { data, error: createFailed } = await supabase
     .from("book_lists")
-    .insert(details)
+    .insert({ ...details, ranked_books: source.rankedBooks })
     .select(bookListColumns)
     .single();
   if (createFailed) throw createFailed;
@@ -138,6 +152,7 @@ const friendlyMessages: [RegExp, string][] = [
   [/teachers_username_key/i, "Another teacher is already using that name."],
   [/teachers_username_check/i, "Names can be 3 to 30 letters, numbers, spaces, or . _ - ' characters."],
   [/book_lists_name_check/i, "Give your book list a name of 1 to 60 characters."],
+  [/book_lists_ranked_books_check/i, `Students can rank from ${minimumRankedBooks} to ${maximumRankedBooks} books.`],
   [/database error saving new user/i, "We could not create that account. Try a different name."],
 ];
 

@@ -8,18 +8,26 @@ export type BookGroup = { bookId: string; groupNumber: number; members: GroupMem
 export type GroupingResult = { groups: BookGroup[]; unplaced: GroupingStudent[]; rankCounts: number[]; placed: number; score: number };
 
 type Assignment = { bookIndex: number; rank: number } | undefined;
-type Candidate = { assignments: Assignment[]; placed: number; first: number; fourth: number; score: number; groupCounts: number[] };
+// "last" counts the placements at the bottom of a student's ranking — a fourth
+// choice on a list where students rank four books.
+type Candidate = { assignments: Assignment[]; placed: number; first: number; last: number; score: number; groupCounts: number[] };
 type Edge = { to: number; reverse: number; capacity: number; cost: number; student?: number; book?: number; rank?: number; mandatory?: boolean };
 
-const rankScores = [10, 6, 3, 1];
+// A first choice is worth more than a second, and each further step down the
+// ranking gives up more than the step before it. However many books a list asks
+// students to rank, the points come out as 10, 6, 3, 1 for a ranking of four.
+function rankScore(rank: number, rankedBooks: number) {
+  const stepsToBottom = rankedBooks - rank + 1;
+  return (stepsToBottom * (stepsToBottom + 1)) / 2;
+}
 
 function isBetter(left: Candidate, right: Candidate | undefined, strategy: GroupingStrategy) {
   if (!right) return true;
   const comparisons = strategy === "first"
-    ? [left.placed - right.placed, left.first - right.first, left.score - right.score, right.fourth - left.fourth]
+    ? [left.placed - right.placed, left.first - right.first, left.score - right.score, right.last - left.last]
     : strategy === "last"
-      ? [left.placed - right.placed, right.fourth - left.fourth, left.score - right.score, left.first - right.first]
-      : [left.placed - right.placed, left.score - right.score, left.first - right.first, right.fourth - left.fourth];
+      ? [left.placed - right.placed, right.last - left.last, left.score - right.score, left.first - right.first]
+      : [left.placed - right.placed, left.score - right.score, left.first - right.first, right.last - left.last];
   return (comparisons.find((value) => value !== 0) || 0) > 0;
 }
 
@@ -30,7 +38,7 @@ function addEdge(graph: Edge[][], from: number, edge: Omit<Edge, "reverse">) {
   graph[edge.to].push(backward);
 }
 
-function assignForConfiguration(students: GroupingStudent[], books: Book[], groupCounts: number[], settings: GroupingSettings): Candidate | undefined {
+function assignForConfiguration(students: GroupingStudent[], books: Book[], groupCounts: number[], settings: GroupingSettings, rankedBooks: number): Candidate | undefined {
   const source = 0;
   const studentStart = 1;
   const slots: { bookIndex: number; mandatory: boolean; node: number }[] = [];
@@ -42,7 +50,11 @@ function assignForConfiguration(students: GroupingStudent[], books: Book[], grou
   const sink = studentStart + students.length + slots.length;
   const graph: Edge[][] = Array.from({ length: sink + 1 }, () => []);
   const bookIndexes = new Map(books.map((book, index) => [book.id, index]));
-  const strategyScore = (rank: number) => settings.strategy === "first" ? (rank === 1 ? 100 : rankScores[rank - 1]) : settings.strategy === "last" ? (rank === 4 ? 0 : 20 + rankScores[rank - 1]) : rankScores[rank - 1];
+  // Each strategy bends the plain ranking points: chasing first choices makes a
+  // first choice worth more than any pile of lower ones, and avoiding last
+  // choices makes every other rank clearly preferable to the bottom one.
+  const best = rankScore(1, rankedBooks);
+  const strategyScore = (rank: number) => settings.strategy === "first" ? (rank === 1 ? best * 10 : rankScore(rank, rankedBooks)) : settings.strategy === "last" ? (rank === rankedBooks ? 0 : best * 2 + rankScore(rank, rankedBooks)) : rankScore(rank, rankedBooks);
 
   students.forEach((student, studentIndex) => {
     addEdge(graph, source, { to: studentStart + studentIndex, capacity: 1, cost: 0 });
@@ -109,8 +121,8 @@ function assignForConfiguration(students: GroupingStudent[], books: Book[], grou
     assignments,
     placed: ranks.length,
     first: ranks.filter((rank) => rank === 1).length,
-    fourth: ranks.filter((rank) => rank === 4).length,
-    score: ranks.reduce((total, rank) => total + rankScores[rank - 1], 0),
+    last: ranks.filter((rank) => rank === rankedBooks).length,
+    score: ranks.reduce((total, rank) => total + rankScore(rank, rankedBooks), 0),
     groupCounts,
   };
 }
@@ -121,7 +133,7 @@ function groupSizes(count: number, groups: number) {
   return sizes;
 }
 
-export function createGroups(books: Book[], students: GroupingStudent[], settings: GroupingSettings): GroupingResult {
+export function createGroups(books: Book[], students: GroupingStudent[], settings: GroupingSettings, rankedBooks: number): GroupingResult {
   const orderedStudents = [...students].sort((left, right) => `${left.firstName}|${left.lastInitial}|${left.id}`.localeCompare(`${right.firstName}|${right.lastInitial}|${right.id}`));
   const interested = books.map((book) => orderedStudents.filter((student) => student.choices.includes(book.id)).length);
   const maximumGroups = books.map((book, index) => Math.min(settings.bookLimits[book.id] || 0, Math.floor(interested[index] / settings.minimumSize), Math.floor(orderedStudents.length / settings.minimumSize)));
@@ -130,7 +142,7 @@ export function createGroups(books: Book[], students: GroupingStudent[], setting
   function visit(bookIndex: number, counts: number[], minimumStudents: number) {
     if (minimumStudents > orderedStudents.length) return;
     if (bookIndex === books.length) {
-      const candidate = assignForConfiguration(orderedStudents, books, counts, settings);
+      const candidate = assignForConfiguration(orderedStudents, books, counts, settings, rankedBooks);
       if (candidate && isBetter(candidate, winner, settings.strategy)) winner = candidate;
       return;
     }
@@ -141,7 +153,7 @@ export function createGroups(books: Book[], students: GroupingStudent[], setting
 
   const membersByBook = books.map(() => [] as GroupMember[]);
   const unplaced: GroupingStudent[] = [];
-  const rankCounts = [0, 0, 0, 0];
+  const rankCounts = Array(rankedBooks).fill(0) as number[];
   winner.assignments.forEach((assignment, index) => {
     if (!assignment) return unplaced.push(orderedStudents[index]);
     membersByBook[assignment.bookIndex].push({ ...orderedStudents[index], rank: assignment.rank });

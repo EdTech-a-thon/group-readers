@@ -63,13 +63,17 @@ create unique index teachers_username_key on public.teachers (lower(username));
 -- responses, and its own saved groups, so the same books can be offered to
 -- several classes without their answers mixing together.
 create table public.book_lists (
-  id          uuid primary key default gen_random_uuid(),
-  teacher     uuid not null references public.teachers (id) on delete cascade,
-  name        text not null check (char_length(btrim(name)) between 1 and 60),
+  id           uuid primary key default gen_random_uuid(),
+  teacher      uuid not null references public.teachers (id) on delete cascade,
+  name         text not null check (char_length(btrim(name)) between 1 and 60),
   -- A private note for the teacher's own dashboard. Students never see it.
-  description text not null default '' check (char_length(description) <= 300),
-  share_token text not null unique,
-  created_at  timestamptz not null default now(),
+  description  text not null default '' check (char_length(description) <= 300),
+  -- How many books each student ranks on this list's student page. The teacher
+  -- chooses it per list, and the list's link stays shut until the list holds at
+  -- least this many books.
+  ranked_books integer not null default 4 check (ranked_books between 2 and 10),
+  share_token  text not null unique,
+  created_at   timestamptz not null default now(),
   -- Redundant on its own, but it lets the tables below point at the pair
   -- (list, teacher) and so guarantees their "teacher" column always agrees
   -- with the list's real owner.
@@ -100,7 +104,9 @@ create table public.books (
 
 create index books_list_idx on public.books (list);
 
--- "choices" is ordered: the first entry is the student's first choice.
+-- "choices" is ordered: the first entry is the student's first choice. How many
+-- entries there are is the owning list's "ranked_books", which a check
+-- constraint here cannot reach; student_submit below holds them to it.
 create table public.submissions (
   id           uuid primary key default gen_random_uuid(),
   teacher      uuid not null,
@@ -108,7 +114,7 @@ create table public.submissions (
   first_name   text not null check (char_length(first_name) between 1 and 50),
   last_initial text not null check (last_initial ~ '^[A-Z]$'),
   student_key  text not null check (char_length(student_key) between 3 and 60),
-  choices      uuid[] not null check (array_length(choices, 1) = 4),
+  choices      uuid[] not null check (array_length(choices, 1) between 2 and 10),
   unique (list, student_key),
   foreign key (list, teacher) references public.book_lists (id, teacher) on delete cascade
 );
@@ -181,7 +187,8 @@ create trigger teachers_keep_identity
   for each row execute function public.teachers_keep_identity();
 
 -- The share token is minted here rather than by the browser, so nobody can
--- choose their own link. Renaming a list is allowed; reissuing its link is not.
+-- choose their own link. Renaming a list is allowed; reissuing its link is not,
+-- and neither is moving the goalposts under students who have already answered.
 create function public.book_lists_guard()
 returns trigger
 language plpgsql
@@ -201,6 +208,11 @@ begin
     new.teacher := old.teacher;
     new.share_token := old.share_token;
     new.created_at := old.created_at;
+
+    if new.ranked_books <> old.ranked_books
+       and exists (select 1 from public.submissions where list = old.id) then
+      raise exception 'Clear student responses before changing how many books students rank.';
+    end if;
   end if;
 
   return new;
@@ -355,14 +367,15 @@ as $$
 declare
   list_id    uuid;
   owner_name text;
+  wanted     integer;
   titles     jsonb;
 begin
   if token is null or char_length(token) < 24 then
     raise exception 'This book club link is not valid.';
   end if;
 
-  select lists.id, teacher.username
-    into list_id, owner_name
+  select lists.id, teacher.username, lists.ranked_books
+    into list_id, owner_name, wanted
     from public.book_lists lists
     join public.teachers teacher on teacher.id = lists.teacher
    where lists.share_token = token;
@@ -383,12 +396,13 @@ begin
     from public.books b
    where b.list = list_id;
 
-  -- A student ranks four books, so a shorter list has nothing to offer them yet.
-  if titles is null or jsonb_array_length(titles) < 4 then
+  -- A student ranks as many books as the teacher asked for, so a list holding
+  -- fewer than that has nothing to offer them yet.
+  if titles is null or jsonb_array_length(titles) < wanted then
     raise exception 'This book club is not ready yet.';
   end if;
 
-  return jsonb_build_object('teacher', owner_name, 'books', titles);
+  return jsonb_build_object('teacher', owner_name, 'rankedBooks', wanted, 'books', titles);
 end;
 $$;
 
@@ -409,13 +423,14 @@ declare
   clean_first   text;
   clean_initial text;
   key           text;
+  wanted        integer;
   matching      integer;
 begin
   if token is null or char_length(token) < 24 then
     raise exception 'This book club link is not valid.';
   end if;
 
-  select id, teacher into list_id, owner_id
+  select id, teacher, ranked_books into list_id, owner_id, wanted
     from public.book_lists where share_token = token;
   if not found then
     raise exception 'This book club link is not valid.';
@@ -432,16 +447,16 @@ begin
     raise exception 'Enter one letter for the last initial.';
   end if;
 
-  if coalesce(array_length(book_choices, 1), 0) <> 4
-     or (select count(distinct choice) from unnest(book_choices) as choice) <> 4 then
-    raise exception 'Choose four different books.';
+  if coalesce(array_length(book_choices, 1), 0) <> wanted
+     or (select count(distinct choice) from unnest(book_choices) as choice) <> wanted then
+    raise exception 'Choose % different books.', wanted;
   end if;
 
   select count(*) into matching
     from public.books
    where id = any (book_choices) and list = list_id;
 
-  if matching <> 4 then
+  if matching <> wanted then
     raise exception 'One or more selected books are not available.';
   end if;
 
@@ -550,9 +565,10 @@ declare
   ];
   book_ids uuid[];
   picked   uuid[];
+  wanted   integer;
   made     integer;
 begin
-  select teacher into owner_id from public.book_lists
+  select teacher, ranked_books into owner_id, wanted from public.book_lists
    where id = target_list and teacher = auth.uid();
   if not found then
     raise exception 'That book list is not available.';
@@ -565,8 +581,8 @@ begin
   select array_agg(id order by position) into book_ids
     from public.books where list = target_list;
 
-  if coalesce(array_length(book_ids, 1), 0) < 4 then
-    raise exception 'Add at least four books before creating test responses.';
+  if coalesce(array_length(book_ids, 1), 0) < wanted then
+    raise exception 'Add at least % books before creating test responses.', wanted;
   end if;
 
   for made in 1 .. response_count loop
@@ -574,7 +590,7 @@ begin
       select id, row_number() over (order by random()) as slot
         from unnest(book_ids) as id
     )
-    select array_agg(id order by slot) into picked from shuffled where slot <= 4;
+    select array_agg(id order by slot) into picked from shuffled where slot <= wanted;
 
     insert into public.submissions (teacher, list, first_name, last_initial, student_key, choices)
     values (

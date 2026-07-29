@@ -1,9 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { coverUrl, errorMessage, supabase, type Book } from "./lib";
+  import { coverUrl, errorMessage, ordinal, supabase, type Book } from "./lib";
 
   let { token }: { token: string } = $props();
   let books = $state<Book[]>([]);
+  // How many books this teacher asked for. Set from the list itself, so a page
+  // never asks for more places than the ranking has.
+  let rankedBooks = $state(4);
   let teacher = $state("");
   let firstName = $state("");
   let lastInitial = $state("");
@@ -18,6 +21,7 @@
       const { data, error: caught } = await supabase.rpc("student_view", { token });
       if (caught) throw caught;
       books = data.books;
+      rankedBooks = data.rankedBooks;
       teacher = data.teacher;
     } catch (caught) {
       error = errorMessage(caught);
@@ -26,17 +30,20 @@
     }
   });
 
+  const places = $derived(Array.from({ length: rankedBooks }, (_, index) => index));
+  const complete = $derived(choices.length === rankedBooks);
+
   function select(bookId: string) {
     const current = choices.indexOf(bookId);
     if (current >= 0) choices = choices.filter((id) => id !== bookId);
-    else if (choices.length < 4) choices = [...choices, bookId];
+    else if (choices.length < rankedBooks) choices = [...choices, bookId];
   }
 
   async function submit(event: SubmitEvent) {
     event.preventDefault();
     error = "";
-    if (choices.length !== 4) {
-      error = "Choose and rank exactly four books.";
+    if (!complete) {
+      error = `Choose and rank exactly ${rankedBooks} books.`;
       return;
     }
     busy = true;
@@ -73,10 +80,10 @@
     <section class="student-hero shell narrow">
       <p class="eyebrow light">{teacher}’s book club</p>
       <h1>Which stories are calling you?</h1>
-      <p>Pick four books in order. The first book you tap is your #1 choice.</p>
-      <div class="ranking-progress" aria-label={`${choices.length} of 4 books chosen`}>
-        {#each [0, 1, 2, 3] as rank}<span class:filled={choices[rank]}>{choices[rank] ? rank + 1 : ""}</span>{/each}
-        <strong>{choices.length === 4 ? "Ready to submit" : `${4 - choices.length} more to choose`}</strong>
+      <p>Pick {rankedBooks} books in order. The first book you tap is your #1 choice.</p>
+      <div class="ranking-progress" aria-label={`${choices.length} of ${rankedBooks} books chosen`}>
+        {#each places as rank}<span class:filled={choices[rank]}>{choices[rank] ? rank + 1 : ""}</span>{/each}
+        <strong>{complete ? "Ready to submit" : `${rankedBooks - choices.length} more to choose`}</strong>
       </div>
     </section>
 
@@ -87,11 +94,11 @@
         <label>Last initial <input class="initial-input" bind:value={lastInitial} required maxlength="1" autocapitalize="characters" placeholder="M" /></label>
       </section>
 
-      <div class="section-title"><span class="step">2</span><div><h2>Now choose your top four</h2><p>Tap in order from your first choice to your fourth. Tap again to remove one.</p></div></div>
+      <div class="section-title"><span class="step">2</span><div><h2>Now choose your top {rankedBooks}</h2><p>Tap in order from your first choice to your {ordinal(rankedBooks)}. Tap again to remove one.</p></div></div>
       <section class="student-books">
         {#each books as book}
           {@const rank = choices.indexOf(book.id)}
-          <button type="button" class="choice-card" class:selected={rank >= 0} disabled={rank < 0 && choices.length === 4} onclick={() => select(book.id)}>
+          <button type="button" class="choice-card" class:selected={rank >= 0} disabled={rank < 0 && complete} onclick={() => select(book.id)}>
             {#if rank >= 0}<span class="rank-badge">#{rank + 1}</span>{/if}
             <img src={coverUrl(book)} alt="Cover of {book.title}" />
             <span class="choice-copy"><strong>{book.title}</strong><span>{book.blurb}</span></span>
@@ -100,7 +107,7 @@
         {/each}
       </section>
       {#if error}<p class="message error" role="alert">{error}</p>{/if}
-      <div class="submit-bar"><div><strong>{choices.length}/4 chosen</strong><span>{choices.length === 4 ? "Your ranking is complete." : "Keep choosing in order."}</span></div><button class="button accent large" disabled={busy || choices.length !== 4}>{busy ? "Submitting…" : "Submit my choices"}</button></div>
+      <div class="submit-bar"><div><strong>{choices.length}/{rankedBooks} chosen</strong><span>{complete ? "Your ranking is complete." : "Keep choosing in order."}</span></div><button class="button accent large" disabled={busy || !complete}>{busy ? "Submitting…" : "Submit my choices"}</button></div>
     </form>
   </main>
 {/if}

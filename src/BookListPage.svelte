@@ -9,8 +9,10 @@
     deleteBook,
     errorMessage,
     maximumBooks,
-    minimumBooks,
+    maximumRankedBooks,
+    minimumRankedBooks,
     navigate,
+    ordinal,
     studentLink,
     supabase,
     type Book,
@@ -35,12 +37,20 @@
   let clearingBooks = $state(false);
   let adding = $state(false);
   let view = $state<"books" | "results" | "groups">("books");
+  // What the ranking box currently shows, which is the saved number until the
+  // teacher types a different one.
+  let rankedDraft = $state(4);
+  let savingRanked = $state(false);
 
   const locked = $derived(submissions.length > 0);
-  // A list is as long as its teacher wants it; it is ready for students as soon
-  // as there are enough books to rank.
-  const ready = $derived(books.length >= minimumBooks);
-  const missing = $derived(Math.max(0, minimumBooks - books.length));
+  // How many books each student ranks on this list, and so how many books the
+  // list needs before its link opens. A list is as long as its teacher wants it
+  // beyond that.
+  const rankedBooks = $derived(list?.rankedBooks ?? 4);
+  const ready = $derived(books.length >= rankedBooks);
+  const missing = $derived(Math.max(0, rankedBooks - books.length));
+  // One entry per place in the ranking: 0 is the first choice.
+  const places = $derived(Array.from({ length: rankedBooks }, (_, index) => index));
 
   onMount(async () => {
     await load();
@@ -77,6 +87,7 @@
       // else; either way this teacher has nothing to open here.
       list = (listRow.data || undefined) as BookList | undefined;
       gone = !list;
+      if (list) rankedDraft = list.rankedBooks;
       books = (bookRows.data || []) as Book[];
       submissions = responseRows.data || [];
       savedPlan = planRows.data?.[0];
@@ -90,6 +101,33 @@
     await navigator.clipboard.writeText(studentLink(list));
     copied = true;
     setTimeout(() => (copied = false), 1800);
+  }
+
+  // Changing how many books students rank moves the point at which the student
+  // link opens, so the saved number goes straight back into the page.
+  async function saveRankedBooks() {
+    const wanted = Number(rankedDraft);
+    if (!Number.isInteger(wanted) || wanted < minimumRankedBooks || wanted > maximumRankedBooks) {
+      error = `Students can rank from ${minimumRankedBooks} to ${maximumRankedBooks} books.`;
+      rankedDraft = rankedBooks;
+      return;
+    }
+    if (wanted === rankedBooks) return;
+
+    error = "";
+    savingRanked = true;
+    try {
+      const { error: caught } = await supabase
+        .from("book_lists")
+        .update({ ranked_books: wanted })
+        .eq("id", listId);
+      if (caught) throw caught;
+    } catch (caught) {
+      error = errorMessage(caught);
+    } finally {
+      savingRanked = false;
+      await load();
+    }
   }
 
   async function addedBook() {
@@ -193,11 +231,11 @@
         <p class="eyebrow">Book list</p>
         <h1>{list?.name}</h1>
         {#if list?.description}<p class="list-note">{list.description}</p>{/if}
-        <p>Add as many books as your class needs — at least {minimumBooks}, since every student ranks four. Once the first student responds, this list stays locked to keep every ranking accurate.</p>
+        <p>Add as many books as your class needs — at least {rankedBooks}, since every student ranks {rankedBooks} of them. Once the first student responds, this list stays locked to keep every ranking accurate.</p>
       </div>
       <!-- The ring fills as the list reaches the point where students can use it,
            and stays full however many books are added after that. -->
-      <div class="progress-ring" style={`--progress:${Math.min(1, books.length / minimumBooks) * 100}%`}>
+      <div class="progress-ring" style={`--progress:${Math.min(1, books.length / rankedBooks) * 100}%`}>
         <strong>{books.length}</strong><span>{books.length === 1 ? "book" : "books"}</span>
       </div>
     </section>
@@ -214,6 +252,30 @@
       {#if locked}
         <div class="notice locked-notice"><strong>“{list?.name}” is locked.</strong><span>Student choices are coming in. Clear all responses if you need to edit the books.</span></div>
       {/if}
+      <section class="ranking-setting">
+        <div>
+          <h3>Books each student ranks</h3>
+          <p>
+            Students put this many books in order, from their first choice down to their {ordinal(rankedBooks)}.
+            {#if books.length < rankedBooks}
+              The link for this list opens once it holds {rankedBooks} books.
+            {:else}
+              Any book beyond the first {rankedBooks} gives them more to choose between.
+            {/if}
+          </p>
+        </div>
+        <label>
+          Books ranked
+          <input
+            type="number"
+            min={minimumRankedBooks}
+            max={maximumRankedBooks}
+            disabled={locked || savingRanked}
+            bind:value={rankedDraft}
+            onchange={saveRankedBooks}
+          />
+        </label>
+      </section>
       {#if books.length}
         <div class="book-list-actions">
           <button class="button danger subtle small" disabled={locked || clearingBooks} onclick={clearBooks}>{clearingBooks ? "Clearing…" : "Clear book list"}</button>
@@ -258,7 +320,7 @@
         <div>
           <p class="eyebrow">Student invitation</p>
           <h2>{ready ? `The link for ${list?.name} is ready` : `${missing} ${missing === 1 ? "book" : "books"} to go`}</h2>
-          <p>{ready ? `Only the students you send this link to can answer, so their choices stay separate from your other book lists. They do not need an account.` : `A list needs at least ${minimumBooks} books before students can rank four of them.`}</p>
+          <p>{ready ? `Only the students you send this link to can answer, so their choices stay separate from your other book lists. They do not need an account.` : `A list needs at least ${rankedBooks} books before students can rank ${rankedBooks} of them.`}</p>
         </div>
         {#if ready && list}
           <div class="share-actions"><input value={studentLink(list)} readonly aria-label="Student link" /><button class="button accent" onclick={copyLink}>{copied ? "Copied!" : "Copy link"}</button></div>
@@ -281,26 +343,26 @@
           {#each books as book}
             <article class="summary-card">
               <img src={coverUrl(book)} alt="" />
-              <div><h3>{book.title}</h3><strong>{countAt(book.id)}</strong><span>top-four picks</span></div>
-              <div class="rank-dots" title="First, second, third, and fourth choice counts">
-                {#each [0, 1, 2, 3] as rank}<span><b>{rank + 1}</b>{countAt(book.id, rank)}</span>{/each}
+              <div><h3>{book.title}</h3><strong>{countAt(book.id)}</strong><span>top-{rankedBooks} picks</span></div>
+              <div class="rank-dots" title={`How many students put this book in each place, first through ${ordinal(rankedBooks)}`}>
+                {#each places as rank}<span><b>{rank + 1}</b>{countAt(book.id, rank)}</span>{/each}
               </div>
             </article>
           {/each}
         </section>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Student</th><th>1st choice</th><th>2nd choice</th><th>3rd choice</th><th>4th choice</th></tr></thead>
+            <thead><tr><th>Student</th>{#each places as rank}<th>{ordinal(rank + 1)} choice</th>{/each}</tr></thead>
             <tbody>
               {#each submissions as submission}
-                <tr><th>{submission.firstName} {submission.lastInitial}.</th>{#each [0, 1, 2, 3] as rank}<td>{choiceBook(submission, rank)?.title || "—"}</td>{/each}</tr>
+                <tr><th>{submission.firstName} {submission.lastInitial}.</th>{#each places as rank}<td>{choiceBook(submission, rank)?.title || "—"}</td>{/each}</tr>
               {/each}
             </tbody>
           </table>
         </div>
       {/if}
     {:else}
-      <GroupBuilder {books} {submissions} {savedPlan} {listId} onSaved={load} />
+      <GroupBuilder {books} {submissions} {savedPlan} {listId} {rankedBooks} onSaved={load} />
     {/if}
   {/if}
 </main>

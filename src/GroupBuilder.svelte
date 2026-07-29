@@ -1,15 +1,24 @@
 <script lang="ts">
   import { createGroups, type GroupingResult, type GroupingSettings, type GroupingStrategy } from "./grouping";
-  import { coverUrl, errorMessage, supabase, type Book } from "./lib";
+  import { coverUrl, errorMessage, ordinal, supabase, type Book } from "./lib";
 
   let {
     books,
     submissions,
     savedPlan,
     listId,
+    rankedBooks,
     onSaved,
-  }: { books: Book[]; submissions: any[]; savedPlan?: any; listId: string; onSaved: () => void } =
-    $props();
+  }: {
+    books: Book[];
+    submissions: any[];
+    savedPlan?: any;
+    listId: string;
+    // How many books each of these students ranked, so the lowest rank a
+    // placement can carry.
+    rankedBooks: number;
+    onSaved: () => void;
+  } = $props();
 
   let minimumSize = $state(3);
   let maximumSize = $state(4);
@@ -32,11 +41,11 @@
     initialized = true;
   });
 
-  const strategyOptions: { value: GroupingStrategy; title: string; description: string }[] = [
-    { value: "overall", title: "Best overall fit", description: "Balances all preferences using 10, 6, 3, and 1 points." },
+  const strategyOptions = $derived<{ value: GroupingStrategy; title: string; description: string }[]>([
+    { value: "overall", title: "Best overall fit", description: "Balances all preferences, scoring a first choice highest and each place below it lower." },
     { value: "first", title: "Maximize first choices", description: "Places as many students as possible into their first-choice book." },
-    { value: "last", title: "Minimize last choices", description: "Avoids fourth-choice placements whenever another valid draft is possible." },
-  ];
+    { value: "last", title: "Minimize last choices", description: `Avoids ${ordinal(rankedBooks)}-choice placements whenever another valid draft is possible.` },
+  ]);
 
   function settings(): GroupingSettings {
     return { minimumSize, maximumSize, strategy, bookLimits: { ...bookLimits } };
@@ -64,7 +73,7 @@
       lastInitial: submission.lastInitial,
       choices: submission.choices,
     }));
-    draft = createGroups(books, students, settings());
+    draft = createGroups(books, students, settings(), rankedBooks);
     draftIsSaved = false;
   }
 
@@ -132,7 +141,7 @@
     <section class="group-results">
       <div class="results-head"><div><p class="eyebrow">{draftIsSaved ? "Confirmed result" : "Draft result"}</p><h2>{draft.placed} of {submissions.length} students placed</h2></div>{#if !draftIsSaved}<button class="button accent" disabled={saving} onclick={save}>{saving ? "Saving…" : "Confirm and save groups"}</button>{/if}</div>
       <div class="placement-summary">
-        {#each draft.rankCounts as count, index}<span><strong>{count}</strong>{index + 1}{index === 0 ? "st" : index === 1 ? "nd" : index === 2 ? "rd" : "th"} choice</span>{/each}
+        {#each draft.rankCounts as count, index}<span><strong>{count}</strong>{ordinal(index + 1)} choice</span>{/each}
         <span class:attention={draft.unplaced.length > 0}><strong>{draft.unplaced.length}</strong>need help</span>
       </div>
       <div class="generated-groups">
@@ -140,7 +149,7 @@
           {@const book = bookFor(group.bookId)}
           <article class="generated-group">
             <header><img src={coverUrl(book)} alt="" /><div><span>Group {group.groupNumber}</span><h3>{book.title}</h3></div><b>{group.members.length}</b></header>
-            <ul>{#each group.members as member}<li><span>{member.firstName} {member.lastInitial}.</span><small class={`rank-${member.rank}`}>{member.rank}{member.rank === 1 ? "st" : member.rank === 2 ? "nd" : member.rank === 3 ? "rd" : "th"} choice</small></li>{/each}</ul>
+            <ul>{#each group.members as member}<li><span>{member.firstName} {member.lastInitial}.</span><small class:last-rank={member.rank === rankedBooks}>{ordinal(member.rank)} choice</small></li>{/each}</ul>
           </article>
         {/each}
       </div>

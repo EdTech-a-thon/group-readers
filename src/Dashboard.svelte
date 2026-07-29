@@ -5,7 +5,6 @@
     bookListColumns,
     duplicateBookList,
     errorMessage,
-    minimumBooks,
     navigate,
     studentLink,
     supabase,
@@ -99,7 +98,7 @@
     try {
       if (mode === "copy" && source) {
         // A fresh copy is somewhere the teacher wants to be, so open it.
-        const copy = await duplicateBookList(teacherId, details, booksIn(source.id));
+        const copy = await duplicateBookList(teacherId, source, details, booksIn(source.id));
         draft = undefined;
         navigate(`/list/${copy.id}`);
         return;
@@ -169,7 +168,8 @@
         {@const copying = booksIn(draft.source.id).length}
         <p class="muted">
           The {copying} {copying === 1 ? "book" : "books"} in “{draft.source.name}” will be copied into this new list,
-          ready for another group of students. Student choices and saved groups stay with the original.
+          ready for another group of students, who will each rank {draft.source.rankedBooks} of them.
+          Student choices and saved groups stay with the original.
         </p>
       {/if}
       <label>Name <input bind:value={draft.name} maxlength="60" required placeholder="e.g. 1st Period" /></label>
@@ -204,7 +204,7 @@
     <section class="list-grid">
       {#each lists as list}
         {@const count = booksIn(list.id).length}
-        {@const short = minimumBooks - count}
+        {@const short = list.rankedBooks - count}
         <article class="list-card">
           <div class="list-card-head">
             <div>
@@ -216,6 +216,7 @@
 
           <dl class="list-stats">
             <div><dt>Books</dt><dd>{count}</dd></div>
+            <div><dt>Each ranks</dt><dd>{list.rankedBooks}</dd></div>
             <div><dt>Student choices</dt><dd>{responsesIn(list.id)}</dd></div>
           </dl>
 
