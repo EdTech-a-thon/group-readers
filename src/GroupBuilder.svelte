@@ -6,8 +6,10 @@
     books,
     submissions,
     savedPlan,
+    listId,
     onSaved,
-  }: { books: Book[]; submissions: any[]; savedPlan?: any; onSaved: () => void } = $props();
+  }: { books: Book[]; submissions: any[]; savedPlan?: any; listId: string; onSaved: () => void } =
+    $props();
 
   let minimumSize = $state(3);
   let maximumSize = $state(4);
@@ -73,6 +75,7 @@
     error = "";
     try {
       const { error: caught } = await supabase.rpc("save_groups", {
+        target_list: listId,
         plan_settings: settings(),
         plan_result: draft,
       });

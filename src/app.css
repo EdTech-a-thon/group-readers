@@ -74,7 +74,18 @@ input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3p
 .progress-ring { flex: 0 0 105px; height: 105px; display: grid; place-content: center; text-align: center; border-radius: 50%; background: radial-gradient(closest-side, var(--cream) 77%, transparent 78% 99%), conic-gradient(var(--coral) var(--progress), #ddd9cf 0); }
 .progress-ring strong { font: 700 1.9rem "Fraunces", serif; line-height: 1; }
 .progress-ring span { font-size: .7rem; color: var(--muted); }
+.list-bar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem 1.1rem; margin-top: 2.5rem; padding: .75rem 1rem; background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 10px; }
+.list-bar-label { color: var(--muted); font-size: .7rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.list-chips { display: flex; flex-wrap: wrap; gap: .4rem; flex: 1; min-width: 200px; }
+.list-chip { border: 1px solid var(--line); border-radius: 999px; padding: .45rem .95rem; background: white; color: var(--muted); font-size: .85rem; font-weight: 700; transition: color .15s, background .15s, border-color .15s; }
+.list-chip:hover:not(:disabled) { border-color: var(--green-2); color: var(--green); }
+.list-chip.active { color: white; background: var(--green); border-color: var(--green); }
+.list-chip:disabled { cursor: not-allowed; }
+.list-bar-actions { display: flex; align-items: center; gap: .5rem; }
+.list-bar-actions .text-link:disabled { opacity: .45; cursor: not-allowed; }
+.text-link.danger { color: #9c3c2a; }
 .dashboard-tabs { display: flex; border-bottom: 1px solid var(--line); margin: 2.5rem 0 1.5rem; }
+.list-bar + .dashboard-tabs { margin-top: 1.2rem; }
 .dashboard-tabs button { display: flex; gap: .6rem; border: 0; border-bottom: 3px solid transparent; padding: 1rem 1.2rem; background: transparent; color: var(--muted); font-weight: 700; }
 .dashboard-tabs button.active { color: var(--green); border-color: var(--coral); }
 .dashboard-tabs span { display: grid; place-items: center; min-width: 25px; height: 20px; padding: 0 5px; border-radius: 10px; background: #e4e6e0; font-size: .68rem; }
@@ -234,6 +245,8 @@ thead th { color: var(--muted); background: #f0eee8; font-size: .7rem; text-tran
   .dashboard-heading { align-items: start; }
   .progress-ring { width: 78px; height: 78px; flex-basis: 78px; }
   .progress-ring strong { font-size: 1.4rem; }
+  .list-bar { align-items: stretch; flex-direction: column; }
+  .list-bar-actions { flex-wrap: wrap; }
   .dashboard-tabs button { padding-inline: .7rem; font-size: .8rem; }
   .dashboard-tabs { overflow-x: auto; }
   .dashboard-tabs button { flex: 0 0 auto; }

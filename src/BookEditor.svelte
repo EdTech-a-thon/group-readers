@@ -1,13 +1,21 @@
 <script lang="ts">
-  import { coverUrl, errorMessage, shrinkCover, supabase, type Book } from "./lib";
+  import { coverUrl, errorMessage, newCoverPath, shrinkCover, supabase, type Book } from "./lib";
 
   let {
     position,
     book,
     teacherId,
+    listId,
     locked,
     onSaved,
-  }: { position: number; book?: Book; teacherId: string; locked: boolean; onSaved: () => void } = $props();
+  }: {
+    position: number;
+    book?: Book;
+    teacherId: string;
+    listId: string;
+    locked: boolean;
+    onSaved: () => void;
+  } = $props();
 
   let editing = $state(false);
   let title = $state("");
@@ -79,7 +87,7 @@
       // The cover image is stored separately from the book's details, so it is
       // uploaded first and the book row then points at it.
       if (cover) {
-        uploadedPath = `${teacherId}/${crypto.randomUUID()}.webp`;
+        uploadedPath = newCoverPath(teacherId);
         const { error: uploadFailed } = await supabase.storage
           .from("covers")
           .upload(uploadedPath, await shrinkCover(cover), { contentType: "image/webp" });
@@ -88,6 +96,7 @@
 
       const details = {
         teacher: teacherId,
+        list: listId,
         position,
         title: title.trim(),
         blurb: blurb.trim(),

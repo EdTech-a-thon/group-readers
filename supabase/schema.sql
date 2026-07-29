@@ -7,6 +7,36 @@
 -- Before running it, turn OFF "Confirm email" under
 -- Authentication → Sign In / Providers → Email. The app never sends email, so
 -- leaving that on would create teacher accounts that can never sign in.
+--
+-- ---------------------------------------------------------------------------
+-- Starting over
+--
+-- This file only works on an empty project. If you have run an earlier version
+-- of it, uncomment the block below to throw away everything first. That deletes
+-- all books, student responses, and saved groups. Teacher accounts themselves
+-- live in Authentication → Users and are not touched.
+-- ---------------------------------------------------------------------------
+
+-- drop table if exists public.grouping_plans, public.submissions, public.books,
+--   public.book_lists, public.teachers cascade;
+-- drop function if exists public.handle_new_user() cascade;
+-- drop function if exists public.teachers_keep_identity() cascade;
+-- drop function if exists public.teachers_keep_share_token() cascade;
+-- drop function if exists public.book_lists_guard() cascade;
+-- drop function if exists public.books_guard() cascade;
+-- drop function if exists public.new_share_token() cascade;
+-- drop function if exists public.student_view(text);
+-- drop function if exists public.student_submit(text, text, text, uuid[]);
+-- drop function if exists public.clear_responses();
+-- drop function if exists public.clear_responses(uuid);
+-- drop function if exists public.add_random_responses(integer);
+-- drop function if exists public.add_random_responses(uuid, integer);
+-- drop function if exists public.save_groups(jsonb, jsonb);
+-- drop function if exists public.save_groups(uuid, jsonb, jsonb);
+-- drop policy if exists covers_public_read on storage.objects;
+-- drop policy if exists covers_insert_own on storage.objects;
+-- drop policy if exists covers_update_own on storage.objects;
+-- drop policy if exists covers_delete_own on storage.objects;
 
 create extension if not exists pgcrypto with schema extensions;
 
@@ -18,54 +48,91 @@ create extension if not exists pgcrypto with schema extensions;
 -- The email address and password live in auth.users, managed by Supabase.
 -- "username" is the teacher's display name, shown to students.
 create table public.teachers (
-  id          uuid primary key references auth.users (id) on delete cascade,
-  username    text not null check (username ~ '^[A-Za-z0-9 ._''-]{3,30}$'),
-  share_token text not null unique,
-  created_at  timestamptz not null default now()
+  id         uuid primary key references auth.users (id) on delete cascade,
+  username   text not null check (username ~ '^[A-Za-z0-9 ._''-]{3,30}$'),
+  created_at timestamptz not null default now()
 );
 
 -- Display names are unique regardless of capitalisation, so two teachers
 -- cannot show students the same name.
 create unique index teachers_username_key on public.teachers (lower(username));
 
+-- A teacher keeps one book list per group of students they teach — say one for
+-- each class period. Every list has its own ten books, its own student link,
+-- its own responses, and its own saved groups, so the same books can be offered
+-- to several classes without their answers mixing together.
+create table public.book_lists (
+  id          uuid primary key default gen_random_uuid(),
+  teacher     uuid not null references public.teachers (id) on delete cascade,
+  name        text not null check (char_length(btrim(name)) between 1 and 60),
+  share_token text not null unique,
+  created_at  timestamptz not null default now(),
+  -- Redundant on its own, but it lets the tables below point at the pair
+  -- (list, teacher) and so guarantees their "teacher" column always agrees
+  -- with the list's real owner.
+  unique (id, teacher)
+);
+
+create index book_lists_teacher_idx on public.book_lists (teacher);
+
+-- Every table below repeats the owning teacher next to the list. That keeps the
+-- permission rules a plain "teacher = the signed-in account", and keeps cover
+-- images filed under one folder per teacher.
 create table public.books (
   id       uuid primary key default gen_random_uuid(),
-  teacher  uuid not null references public.teachers (id) on delete cascade,
+  teacher  uuid not null,
+  list     uuid not null,
   position integer not null check (position between 1 and 10),
   title    text not null check (char_length(title) between 1 and 120),
   blurb    text not null check (char_length(blurb) between 1 and 500),
   cover    text not null,
-  unique (teacher, position)
+  unique (list, position),
+  foreign key (list, teacher) references public.book_lists (id, teacher) on delete cascade
 );
 
-create index books_teacher_idx on public.books (teacher);
+create index books_list_idx on public.books (list);
 
 -- "choices" is ordered: the first entry is the student's first choice.
 create table public.submissions (
   id           uuid primary key default gen_random_uuid(),
-  teacher      uuid not null references public.teachers (id) on delete cascade,
+  teacher      uuid not null,
+  list         uuid not null,
   first_name   text not null check (char_length(first_name) between 1 and 50),
   last_initial text not null check (last_initial ~ '^[A-Z]$'),
   student_key  text not null check (char_length(student_key) between 3 and 60),
   choices      uuid[] not null check (array_length(choices, 1) = 4),
-  unique (teacher, student_key)
+  unique (list, student_key),
+  foreign key (list, teacher) references public.book_lists (id, teacher) on delete cascade
 );
 
-create index submissions_teacher_idx on public.submissions (teacher);
+create index submissions_list_idx on public.submissions (list);
 
 create table public.grouping_plans (
   id       uuid primary key default gen_random_uuid(),
-  teacher  uuid not null unique references public.teachers (id) on delete cascade,
+  teacher  uuid not null,
+  list     uuid not null unique,
   settings jsonb not null,
-  result   jsonb not null
+  result   jsonb not null,
+  foreign key (list, teacher) references public.book_lists (id, teacher) on delete cascade
 );
 
 -- ---------------------------------------------------------------------------
 -- Triggers
 -- ---------------------------------------------------------------------------
 
--- When someone signs up, create their teacher row and mint the secret token
--- that their student link is built from.
+-- The secret that a student link is built from. Long and random enough that a
+-- link cannot be guessed, and safe to paste into a URL.
+create function public.new_share_token()
+returns text
+language sql
+volatile
+set search_path = public, extensions
+as $$
+  select replace(replace(encode(extensions.gen_random_bytes(30), 'base64'), '/', '_'), '+', '-');
+$$;
+
+-- When someone signs up, create their teacher row along with a first book list
+-- so they have somewhere to start.
 create function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -73,12 +140,13 @@ security definer
 set search_path = public, extensions
 as $$
 begin
-  insert into public.teachers (id, username, share_token)
+  insert into public.teachers (id, username)
   values (
     new.id,
-    coalesce(nullif(btrim(new.raw_user_meta_data ->> 'username'), ''), 'Teacher'),
-    replace(replace(encode(extensions.gen_random_bytes(30), 'base64'), '/', '_'), '+', '-')
+    coalesce(nullif(btrim(new.raw_user_meta_data ->> 'username'), ''), 'Teacher')
   );
+
+  insert into public.book_lists (teacher, name) values (new.id, 'My book list');
   return new;
 end;
 $$;
@@ -87,45 +155,76 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- A teacher may rename themselves, but never reissue their own share token.
-create function public.teachers_keep_share_token()
+-- A teacher may rename themselves, but nothing else about the row is theirs to
+-- change.
+create function public.teachers_keep_identity()
 returns trigger
 language plpgsql
 as $$
 begin
   new.id := old.id;
-  new.share_token := old.share_token;
   new.created_at := old.created_at;
   return new;
 end;
 $$;
 
-create trigger teachers_keep_share_token
+create trigger teachers_keep_identity
   before update on public.teachers
-  for each row execute function public.teachers_keep_share_token();
+  for each row execute function public.teachers_keep_identity();
 
--- Once a single student has responded, the book list is frozen so every
+-- The share token is minted here rather than by the browser, so nobody can
+-- choose their own link. Renaming a list is allowed; reissuing its link is not.
+create function public.book_lists_guard()
+returns trigger
+language plpgsql
+set search_path = public, extensions
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.teacher := coalesce(new.teacher, auth.uid());
+    new.share_token := public.new_share_token();
+    new.created_at := now();
+
+    if (select count(*) from public.book_lists where teacher = new.teacher) >= 20 then
+      raise exception 'You can keep up to 20 book lists. Delete one you no longer need.';
+    end if;
+  else
+    new.id := old.id;
+    new.teacher := old.teacher;
+    new.share_token := old.share_token;
+    new.created_at := old.created_at;
+  end if;
+
+  return new;
+end;
+$$;
+
+create trigger book_lists_guard
+  before insert or update on public.book_lists
+  for each row execute function public.book_lists_guard();
+
+-- Once a single student has responded, that list's books are frozen so every
 -- ranking stays meaningful. Ten books is the hard ceiling.
 create function public.books_guard()
 returns trigger
 language plpgsql
 as $$
 declare
-  owner_id uuid;
+  list_id uuid;
 begin
   if tg_op = 'DELETE' then
-    owner_id := old.teacher;
+    list_id := old.list;
   else
-    owner_id := new.teacher;
+    list_id := new.list;
   end if;
 
-  if exists (select 1 from public.submissions where teacher = owner_id) then
+  if exists (select 1 from public.submissions where list = list_id) then
     raise exception 'Clear student responses before changing the book list.';
   end if;
 
   if tg_op = 'INSERT'
-     and (select count(*) from public.books where teacher = owner_id) >= 10 then
-    raise exception 'A book club can have only ten books.';
+     and (select count(*) from public.books where list = list_id) >= 10 then
+    raise exception 'A book list can have only ten books.';
   end if;
 
   if tg_op = 'DELETE' then
@@ -149,10 +248,11 @@ create trigger books_guard
 -- the data only through the functions further down.
 -- ---------------------------------------------------------------------------
 
-revoke all on public.teachers, public.books, public.submissions,
-  public.grouping_plans from anon, authenticated;
+revoke all on public.teachers, public.book_lists, public.books,
+  public.submissions, public.grouping_plans from anon, authenticated;
 
 grant select, update on public.teachers to authenticated;
+grant select, insert, update, delete on public.book_lists to authenticated;
 grant select, insert, update, delete on public.books to authenticated;
 grant select on public.submissions to authenticated;
 grant select on public.grouping_plans to authenticated;
@@ -166,6 +266,7 @@ grant select on public.grouping_plans to authenticated;
 -- ---------------------------------------------------------------------------
 
 alter table public.teachers enable row level security;
+alter table public.book_lists enable row level security;
 alter table public.books enable row level security;
 alter table public.submissions enable row level security;
 alter table public.grouping_plans enable row level security;
@@ -175,6 +276,16 @@ create policy teachers_select_own on public.teachers
 create policy teachers_update_own on public.teachers
   for update to authenticated
   using (id = (select auth.uid())) with check (id = (select auth.uid()));
+
+create policy book_lists_select_own on public.book_lists
+  for select to authenticated using (teacher = (select auth.uid()));
+create policy book_lists_insert_own on public.book_lists
+  for insert to authenticated with check (teacher = (select auth.uid()));
+create policy book_lists_update_own on public.book_lists
+  for update to authenticated
+  using (teacher = (select auth.uid())) with check (teacher = (select auth.uid()));
+create policy book_lists_delete_own on public.book_lists
+  for delete to authenticated using (teacher = (select auth.uid()));
 
 create policy books_select_own on public.books
   for select to authenticated using (teacher = (select auth.uid()));
@@ -196,7 +307,8 @@ create policy grouping_plans_select_own on public.grouping_plans
 -- Cover image storage
 --
 -- Covers must load on the student page, which has no account, so the bucket is
--- public to read. Writing is limited to the folder named after the teacher.
+-- public to read. Writing is limited to the folder named after the teacher, so
+-- the same folder holds the covers for all of that teacher's book lists.
 -- ---------------------------------------------------------------------------
 
 insert into storage.buckets (id, name, public)
@@ -222,7 +334,8 @@ create policy covers_delete_own on storage.objects
 -- The student link
 --
 -- Both functions are reachable without an account. They reveal nothing unless
--- the caller already holds the teacher's secret share token.
+-- the caller already holds the secret token of one book list, and they only
+-- ever touch that one list.
 -- ---------------------------------------------------------------------------
 
 create function public.student_view(token text)
@@ -232,14 +345,19 @@ security definer
 set search_path = public, extensions
 as $$
 declare
-  owner  public.teachers%rowtype;
-  titles jsonb;
+  list_id    uuid;
+  owner_name text;
+  titles     jsonb;
 begin
   if token is null or char_length(token) < 24 then
     raise exception 'This book club link is not valid.';
   end if;
 
-  select * into owner from public.teachers where share_token = token;
+  select lists.id, teacher.username
+    into list_id, owner_name
+    from public.book_lists lists
+    join public.teachers teacher on teacher.id = lists.teacher
+   where lists.share_token = token;
   if not found then
     raise exception 'This book club link is not valid.';
   end if;
@@ -255,13 +373,13 @@ begin
          )
     into titles
     from public.books b
-   where b.teacher = owner.id;
+   where b.list = list_id;
 
   if titles is null or jsonb_array_length(titles) <> 10 then
     raise exception 'This book club is not ready yet.';
   end if;
 
-  return jsonb_build_object('teacher', owner.username, 'books', titles);
+  return jsonb_build_object('teacher', owner_name, 'books', titles);
 end;
 $$;
 
@@ -277,6 +395,7 @@ security definer
 set search_path = public, extensions
 as $$
 declare
+  list_id       uuid;
   owner_id      uuid;
   clean_first   text;
   clean_initial text;
@@ -287,7 +406,8 @@ begin
     raise exception 'This book club link is not valid.';
   end if;
 
-  select id into owner_id from public.teachers where share_token = token;
+  select id, teacher into list_id, owner_id
+    from public.book_lists where share_token = token;
   if not found then
     raise exception 'This book club link is not valid.';
   end if;
@@ -310,7 +430,7 @@ begin
 
   select count(*) into matching
     from public.books
-   where id = any (book_choices) and teacher = owner_id;
+   where id = any (book_choices) and list = list_id;
 
   if matching <> 4 then
     raise exception 'One or more selected books are not available.';
@@ -319,21 +439,22 @@ begin
   -- Re-submitting under the same name replaces the earlier ranking.
   key := lower(clean_first) || '|' || lower(clean_initial);
 
-  insert into public.submissions (teacher, first_name, last_initial, student_key, choices)
+  insert into public.submissions (teacher, list, first_name, last_initial, student_key, choices)
   values (
     owner_id,
+    list_id,
     upper(left(clean_first, 1)) || substr(clean_first, 2),
     clean_initial,
     key,
     book_choices
   )
-  on conflict (teacher, student_key) do update
+  on conflict (list, student_key) do update
     set first_name   = excluded.first_name,
         last_initial = excluded.last_initial,
         choices      = excluded.choices;
 
-  -- Any saved grouping is now out of date.
-  delete from public.grouping_plans where teacher = owner_id;
+  -- Any saved grouping for this list is now out of date.
+  delete from public.grouping_plans where list = list_id;
 
   return jsonb_build_object('success', true);
 end;
@@ -341,36 +462,40 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- Teacher actions
+--
+-- Each one names the book list it should act on, and each one checks that the
+-- signed-in teacher really owns that list before touching anything.
 -- ---------------------------------------------------------------------------
 
-create function public.clear_responses()
+create function public.clear_responses(target_list uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
-declare
-  owner_id uuid := auth.uid();
 begin
-  if owner_id is null then
-    raise exception 'Please sign in again.';
+  if not exists (
+       select 1 from public.book_lists
+        where id = target_list and teacher = auth.uid()
+     ) then
+    raise exception 'That book list is not available.';
   end if;
 
-  delete from public.submissions where teacher = owner_id;
-  delete from public.grouping_plans where teacher = owner_id;
+  delete from public.submissions where list = target_list;
+  delete from public.grouping_plans where list = target_list;
 end;
 $$;
 
--- Fills the class with make-believe responses so a teacher can try out
--- grouping before their students have answered.
-create function public.add_random_responses(response_count integer)
+-- Fills the list with make-believe responses so a teacher can try out grouping
+-- before their students have answered.
+create function public.add_random_responses(target_list uuid, response_count integer)
 returns integer
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
 declare
-  owner_id uuid := auth.uid();
+  owner_id uuid;
   names    text[] := array[
     'Avery', 'Blake', 'Casey', 'Dakota', 'Emerson', 'Finley', 'Gray', 'Harper',
     'Indigo', 'Jules', 'Kai', 'Logan', 'Morgan', 'Nico', 'Oakley', 'Parker',
@@ -380,8 +505,10 @@ declare
   picked   uuid[];
   made     integer;
 begin
-  if owner_id is null then
-    raise exception 'Please sign in again.';
+  select teacher into owner_id from public.book_lists
+   where id = target_list and teacher = auth.uid();
+  if not found then
+    raise exception 'That book list is not available.';
   end if;
 
   if response_count is null or response_count < 1 or response_count > 100 then
@@ -389,7 +516,7 @@ begin
   end if;
 
   select array_agg(id order by position) into book_ids
-    from public.books where teacher = owner_id;
+    from public.books where list = target_list;
 
   if coalesce(array_length(book_ids, 1), 0) <> 10 then
     raise exception 'Add all ten books before creating test responses.';
@@ -402,9 +529,10 @@ begin
     )
     select array_agg(id order by slot) into picked from shuffled where slot <= 4;
 
-    insert into public.submissions (teacher, first_name, last_initial, student_key, choices)
+    insert into public.submissions (teacher, list, first_name, last_initial, student_key, choices)
     values (
       owner_id,
+      target_list,
       names[1 + floor(random() * array_length(names, 1))::integer] || ' (Test)',
       chr(65 + floor(random() * 26)::integer),
       'test-' || replace(gen_random_uuid()::text, '-', ''),
@@ -412,7 +540,7 @@ begin
     );
   end loop;
 
-  delete from public.grouping_plans where teacher = owner_id;
+  delete from public.grouping_plans where list = target_list;
   return response_count;
 end;
 $$;
@@ -420,14 +548,14 @@ $$;
 -- The grouping itself is worked out in the browser. This re-checks the whole
 -- draft against the real data before saving it, so a tampered-with draft can
 -- never be stored.
-create function public.save_groups(plan_settings jsonb, plan_result jsonb)
+create function public.save_groups(target_list uuid, plan_settings jsonb, plan_result jsonb)
 returns void
 language plpgsql
 security definer
 set search_path = public, extensions
 as $$
 declare
-  owner_id       uuid := auth.uid();
+  owner_id       uuid;
   minimum        integer;
   maximum        integer;
   book_limits    jsonb;
@@ -440,8 +568,10 @@ declare
   assigned       text[] := '{}';
   total_students integer;
 begin
-  if owner_id is null then
-    raise exception 'Please sign in again.';
+  select teacher into owner_id from public.book_lists
+   where id = target_list and teacher = auth.uid();
+  if not found then
+    raise exception 'That book list is not available.';
   end if;
 
   if length(plan_settings::text) > 50000 or length(plan_result::text) > 200000 then
@@ -467,8 +597,8 @@ begin
     raise exception 'The grouping draft is not valid.';
   end if;
 
-  -- Every one of the teacher's books needs a sensible group limit.
-  for book_id in select id::text from public.books where teacher = owner_id loop
+  -- Every one of the list's books needs a sensible group limit.
+  for book_id in select id::text from public.books where list = target_list loop
     if book_limits ? book_id and jsonb_typeof(book_limits -> book_id) <> 'number' then
       raise exception 'Choose a valid maximum number of groups for each book.';
     end if;
@@ -493,7 +623,7 @@ begin
   for one_group in select value from jsonb_array_elements(plan_result -> 'groups') loop
     if not exists (
          select 1 from public.books
-          where teacher = owner_id and id::text = one_group ->> 'bookId'
+          where list = target_list and id::text = one_group ->> 'bookId'
        )
        or jsonb_typeof(one_group -> 'members') <> 'array'
        or jsonb_array_length(one_group -> 'members') < minimum
@@ -504,7 +634,7 @@ begin
     for one_member in select value from jsonb_array_elements(one_group -> 'members') loop
       select choices into member_choices
         from public.submissions
-       where teacher = owner_id and id::text = one_member ->> 'id';
+       where list = target_list and id::text = one_member ->> 'id';
 
       -- The claimed rank has to match where that book really sits in the
       -- student's own ranking.
@@ -523,7 +653,7 @@ begin
     assigned := assigned || (one_member ->> 'id');
   end loop;
 
-  select count(*) into total_students from public.submissions where teacher = owner_id;
+  select count(*) into total_students from public.submissions where list = target_list;
 
   if coalesce(array_length(assigned, 1), 0) <> total_students
      or (select count(distinct student) from unnest(assigned) as student) <> total_students
@@ -531,15 +661,15 @@ begin
           select 1 from unnest(assigned) as student
            where not exists (
              select 1 from public.submissions
-              where teacher = owner_id and id::text = student
+              where list = target_list and id::text = student
            )
         ) then
     raise exception 'Every student must appear exactly once in the grouping draft.';
   end if;
 
-  insert into public.grouping_plans (teacher, settings, result)
-  values (owner_id, plan_settings, plan_result)
-  on conflict (teacher) do update
+  insert into public.grouping_plans (teacher, list, settings, result)
+  values (owner_id, target_list, plan_settings, plan_result)
+  on conflict (list) do update
     set settings = excluded.settings,
         result   = excluded.result;
 end;
@@ -549,14 +679,19 @@ $$;
 -- Who may call what
 -- ---------------------------------------------------------------------------
 
+revoke all on function public.new_share_token() from public;
 revoke all on function public.student_view(text) from public;
 revoke all on function public.student_submit(text, text, text, uuid[]) from public;
-revoke all on function public.clear_responses() from public;
-revoke all on function public.add_random_responses(integer) from public;
-revoke all on function public.save_groups(jsonb, jsonb) from public;
+revoke all on function public.clear_responses(uuid) from public;
+revoke all on function public.add_random_responses(uuid, integer) from public;
+revoke all on function public.save_groups(uuid, jsonb, jsonb) from public;
+
+-- The book_lists trigger mints tokens as whoever is creating the list, so a
+-- signed-in teacher has to be allowed to reach the generator itself.
+grant execute on function public.new_share_token() to authenticated;
 
 grant execute on function public.student_view(text) to anon, authenticated;
 grant execute on function public.student_submit(text, text, text, uuid[]) to anon, authenticated;
-grant execute on function public.clear_responses() to authenticated;
-grant execute on function public.add_random_responses(integer) to authenticated;
-grant execute on function public.save_groups(jsonb, jsonb) to authenticated;
+grant execute on function public.clear_responses(uuid) to authenticated;
+grant execute on function public.add_random_responses(uuid, integer) to authenticated;
+grant execute on function public.save_groups(uuid, jsonb, jsonb) to authenticated;
