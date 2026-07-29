@@ -12,6 +12,9 @@
   let error = $state("");
   let copied = $state(false);
   let clearing = $state(false);
+  let randomCount = $state(10);
+  let addingRandom = $state(false);
+  let clearingBooks = $state(false);
   let view = $state<"books" | "results" | "groups">("books");
 
   const username = pb.authStore.record?.username || "Teacher";
@@ -61,6 +64,40 @@
     }
   }
 
+  async function addRandomResponses() {
+    const count = Number(randomCount);
+    if (!Number.isInteger(count) || count < 1 || count > 100) {
+      error = "Choose a number from 1 to 100.";
+      return;
+    }
+    error = "";
+    addingRandom = true;
+    try {
+      await pb.send("/api/bookclub/random-responses", { method: "POST", body: { count } });
+      await loadAll();
+    } catch (caught) {
+      error = errorMessage(caught);
+    } finally {
+      addingRandom = false;
+    }
+  }
+
+  async function clearBooks() {
+    if (!confirm("Remove every book from your list? This cannot be undone.")) return;
+    clearingBooks = true;
+    error = "";
+    try {
+      await Promise.all(books.map((book) => pb.collection("books").delete(book.id)));
+      books = [];
+      savedPlan = undefined;
+    } catch (caught) {
+      error = errorMessage(caught);
+      await loadAll();
+    } finally {
+      clearingBooks = false;
+    }
+  }
+
   function choiceBook(submission: any, index: number): Book | undefined {
     const choiceId = submission.choices[index];
     return books.find((book) => book.id === choiceId);
@@ -101,6 +138,11 @@
     {#if locked}
       <div class="notice locked-notice"><strong>Your book list is locked.</strong><span>Student choices are coming in. Clear all responses if you need to edit the books.</span></div>
     {/if}
+    {#if books.length}
+      <div class="book-list-actions">
+        <button class="button danger subtle small" disabled={locked || clearingBooks} onclick={clearBooks}>{clearingBooks ? "Clearing…" : "Clear book list"}</button>
+      </div>
+    {/if}
     <section class="editor-list">
       {#each Array(10) as _, index}
         <BookEditor position={index + 1} book={books.find((book) => book.position === index + 1)} {locked} onSaved={loadAll} />
@@ -120,7 +162,11 @@
   {:else if view === "results"}
     <section class="results-head">
       <div><p class="eyebrow">Class responses</p><h2>{submissions.length} {submissions.length === 1 ? "student has" : "students have"} ranked their books</h2></div>
-      {#if submissions.length}<button class="button danger subtle" disabled={clearing} onclick={clearResponses}>{clearing ? "Clearing…" : "Clear all responses"}</button>{/if}
+      <div class="response-actions">
+        <label>Test responses <input aria-label="Number of random test responses" type="number" min="1" max="100" bind:value={randomCount} /></label>
+        <button class="button subtle" disabled={addingRandom || !complete} onclick={addRandomResponses}>{addingRandom ? "Adding…" : "Add random"}</button>
+        {#if submissions.length}<button class="button danger subtle" disabled={clearing || addingRandom} onclick={clearResponses}>{clearing ? "Clearing…" : "Clear all responses"}</button>{/if}
+      </div>
     </section>
 
     {#if submissions.length === 0}

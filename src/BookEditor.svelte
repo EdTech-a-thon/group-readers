@@ -13,6 +13,7 @@
   let blurb = $state("");
   let cover: File | null = $state(null);
   let preview = $state("");
+  let dragging = $state(false);
   let busy = $state(false);
   let error = $state("");
 
@@ -22,10 +23,46 @@
     preview = book ? coverUrl(book) : "";
   });
 
-  function chooseCover(event: Event) {
-    const file = (event.currentTarget as HTMLInputElement).files?.[0] || null;
+  function setCover(file: File) {
+    if (!file.type.startsWith("image/")) {
+      error = "Please drop an image file here.";
+      return;
+    }
     cover = file;
-    if (file) preview = URL.createObjectURL(file);
+    preview = URL.createObjectURL(file);
+    error = "";
+  }
+
+  function chooseCover(event: Event) {
+    const file = (event.currentTarget as HTMLInputElement).files?.[0];
+    if (file) setCover(file);
+  }
+
+  async function dropCover(event: DragEvent) {
+    event.preventDefault();
+    dragging = false;
+
+    const file = [...(event.dataTransfer?.files || [])].find((item) => item.type.startsWith("image/"));
+    if (file) {
+      setCover(file);
+      return;
+    }
+
+    const imageUrl = event.dataTransfer?.getData("text/uri-list");
+    if (!imageUrl) {
+      error = "That does not appear to be an image. Try dragging the image itself.";
+      return;
+    }
+
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      if (!response.ok || !blob.type.startsWith("image/")) throw new Error();
+      const name = new URL(imageUrl).pathname.split("/").pop() || "book-cover";
+      setCover(new File([blob], name, { type: blob.type }));
+    } catch {
+      error = "That website blocks direct image sharing. Save the image first, then drag it here.";
+    }
   }
 
   async function save(event: SubmitEvent) {
@@ -71,11 +108,18 @@
   {:else}
     <form class="book-form" onsubmit={save}>
       <div class="cover-picker">
-        <label class="cover-drop">
+        <label
+          class="cover-drop"
+          class:dragging
+          ondragenter={(event) => { event.preventDefault(); dragging = true; }}
+          ondragover={(event) => event.preventDefault()}
+          ondragleave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) dragging = false; }}
+          ondrop={dropCover}
+        >
           {#if preview}
             <img src={preview} alt="Book cover preview" />
           {:else}
-            <span class="cover-plus">+</span><span>Add cover</span>
+            <span class="cover-plus">+</span><span>Add or drop cover</span>
           {/if}
           <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onchange={chooseCover} />
         </label>

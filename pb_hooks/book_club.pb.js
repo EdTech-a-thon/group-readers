@@ -114,6 +114,46 @@ routerAdd("POST", "/api/bookclub/clear", (e) => {
   return e.json(200, { success: true });
 }, $apis.requireAuth("teachers"));
 
+routerAdd("POST", "/api/bookclub/random-responses", (e) => {
+  const count = Number(e.requestInfo().body.count);
+  if (!Number.isInteger(count) || count < 1 || count > 100) {
+    throw new BadRequestError("Choose a number from 1 to 100.");
+  }
+
+  const books = e.app.findRecordsByFilter("books", "teacher = {:teacher}", "position", 10, 0, { teacher: e.auth.id });
+  if (books.length !== 10) throw new BadRequestError("Add all ten books before creating test responses.");
+
+  const names = ["Avery", "Blake", "Casey", "Dakota", "Emerson", "Finley", "Gray", "Harper", "Indigo", "Jules", "Kai", "Logan", "Morgan", "Nico", "Oakley", "Parker", "Quinn", "Riley", "Sage", "Taylor"];
+  const collection = e.app.findCollectionByNameOrId("submissions");
+
+  for (let index = 0; index < count; index++) {
+    const suffix = $security.randomString(6).toLowerCase();
+    const firstName = names[Math.floor(Math.random() * names.length)];
+    const choices = books.map((book) => book.id);
+    for (let choiceIndex = choices.length - 1; choiceIndex > 0; choiceIndex--) {
+      const randomIndex = Math.floor(Math.random() * (choiceIndex + 1));
+      const current = choices[choiceIndex];
+      choices[choiceIndex] = choices[randomIndex];
+      choices[randomIndex] = current;
+    }
+
+    const submission = new Record(collection);
+    submission.set("teacher", e.auth.id);
+    submission.set("studentKey", "test-" + suffix);
+    submission.set("firstName", firstName + " (Test)");
+    submission.set("lastInitial", String.fromCharCode(65 + Math.floor(Math.random() * 26)));
+    submission.set("choices", choices.slice(0, 4));
+    e.app.save(submission);
+  }
+
+  try {
+    const plan = e.app.findFirstRecordByFilter("grouping_plans", "teacher = {:teacher}", { teacher: e.auth.id });
+    e.app.delete(plan);
+  } catch (_) {}
+
+  return e.json(200, { success: true, count });
+}, $apis.requireAuth("teachers"));
+
 routerAdd("POST", "/api/bookclub/groups", (e) => {
   const body = e.requestInfo().body;
   const settings = body.settings || {};
