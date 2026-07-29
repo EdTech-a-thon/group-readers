@@ -17,26 +17,27 @@
 -- live in Authentication → Users and are not touched.
 -- ---------------------------------------------------------------------------
 
--- drop table if exists public.grouping_plans, public.submissions, public.books,
---   public.book_lists, public.teachers cascade;
--- drop function if exists public.handle_new_user() cascade;
--- drop function if exists public.teachers_keep_identity() cascade;
--- drop function if exists public.teachers_keep_share_token() cascade;
--- drop function if exists public.book_lists_guard() cascade;
--- drop function if exists public.books_guard() cascade;
--- drop function if exists public.new_share_token() cascade;
--- drop function if exists public.student_view(text);
--- drop function if exists public.student_submit(text, text, text, uuid[]);
--- drop function if exists public.clear_responses();
--- drop function if exists public.clear_responses(uuid);
--- drop function if exists public.add_random_responses(integer);
--- drop function if exists public.add_random_responses(uuid, integer);
--- drop function if exists public.save_groups(jsonb, jsonb);
--- drop function if exists public.save_groups(uuid, jsonb, jsonb);
--- drop policy if exists covers_public_read on storage.objects;
--- drop policy if exists covers_insert_own on storage.objects;
--- drop policy if exists covers_update_own on storage.objects;
--- drop policy if exists covers_delete_own on storage.objects;
+drop table if exists public.grouping_plans, public.submissions, public.books,
+  public.book_lists, public.teachers cascade;
+drop function if exists public.handle_new_user() cascade;
+drop function if exists public.teachers_keep_identity() cascade;
+drop function if exists public.teachers_keep_share_token() cascade;
+drop function if exists public.book_lists_guard() cascade;
+drop function if exists public.books_guard() cascade;
+drop function if exists public.new_share_token() cascade;
+drop function if exists public.student_view(text);
+drop function if exists public.student_submit(text, text, text, uuid[]);
+drop function if exists public.remove_book(uuid);
+drop function if exists public.clear_responses();
+drop function if exists public.clear_responses(uuid);
+drop function if exists public.add_random_responses(integer);
+drop function if exists public.add_random_responses(uuid, integer);
+drop function if exists public.save_groups(jsonb, jsonb);
+drop function if exists public.save_groups(uuid, jsonb, jsonb);
+drop policy if exists covers_public_read on storage.objects;
+drop policy if exists covers_insert_own on storage.objects;
+drop policy if exists covers_update_own on storage.objects;
+drop policy if exists covers_delete_own on storage.objects;
 
 create extension if not exists pgcrypto with schema extensions;
 
@@ -58,13 +59,15 @@ create table public.teachers (
 create unique index teachers_username_key on public.teachers (lower(username));
 
 -- A teacher keeps one book list per group of students they teach — say one for
--- each class period. Every list has its own ten books, its own student link,
--- its own responses, and its own saved groups, so the same books can be offered
--- to several classes without their answers mixing together.
+-- each class period. Every list has its own books, its own student link, its own
+-- responses, and its own saved groups, so the same books can be offered to
+-- several classes without their answers mixing together.
 create table public.book_lists (
   id          uuid primary key default gen_random_uuid(),
   teacher     uuid not null references public.teachers (id) on delete cascade,
   name        text not null check (char_length(btrim(name)) between 1 and 60),
+  -- A private note for the teacher's own dashboard. Students never see it.
+  description text not null default '' check (char_length(description) <= 300),
   share_token text not null unique,
   created_at  timestamptz not null default now(),
   -- Redundant on its own, but it lets the tables below point at the pair
@@ -78,15 +81,20 @@ create index book_lists_teacher_idx on public.book_lists (teacher);
 -- Every table below repeats the owning teacher next to the list. That keeps the
 -- permission rules a plain "teacher = the signed-in account", and keeps cover
 -- images filed under one folder per teacher.
+--
+-- A list holds however many books its teacher chooses, numbered 1 upwards with
+-- no gaps. Removing a book therefore renumbers the ones after it, which briefly
+-- reuses a position that is still taken, so the numbering is checked at the end
+-- of the change rather than row by row.
 create table public.books (
   id       uuid primary key default gen_random_uuid(),
   teacher  uuid not null,
   list     uuid not null,
-  position integer not null check (position between 1 and 10),
+  position integer not null check (position between 1 and 30),
   title    text not null check (char_length(title) between 1 and 120),
   blurb    text not null check (char_length(blurb) between 1 and 500),
   cover    text not null,
-  unique (list, position),
+  unique (list, position) deferrable initially immediate,
   foreign key (list, teacher) references public.book_lists (id, teacher) on delete cascade
 );
 
@@ -204,7 +212,7 @@ create trigger book_lists_guard
   for each row execute function public.book_lists_guard();
 
 -- Once a single student has responded, that list's books are frozen so every
--- ranking stays meaningful. Ten books is the hard ceiling.
+-- ranking stays meaningful. Thirty books is the hard ceiling.
 create function public.books_guard()
 returns trigger
 language plpgsql
@@ -223,8 +231,8 @@ begin
   end if;
 
   if tg_op = 'INSERT'
-     and (select count(*) from public.books where list = list_id) >= 10 then
-    raise exception 'A book list can have only ten books.';
+     and (select count(*) from public.books where list = list_id) >= 30 then
+    raise exception 'A book list can hold up to thirty books.';
   end if;
 
   if tg_op = 'DELETE' then
@@ -375,7 +383,8 @@ begin
     from public.books b
    where b.list = list_id;
 
-  if titles is null or jsonb_array_length(titles) <> 10 then
+  -- A student ranks four books, so a shorter list has nothing to offer them yet.
+  if titles is null or jsonb_array_length(titles) < 4 then
     raise exception 'This book club is not ready yet.';
   end if;
 
@@ -467,6 +476,44 @@ $$;
 -- signed-in teacher really owns that list before touching anything.
 -- ---------------------------------------------------------------------------
 
+-- Takes one book off a list and closes the gap it leaves, so the remaining books
+-- keep their numbering running 1, 2, 3 upwards. Deleting the row and shifting
+-- the rest has to happen together, which is why it is one function rather than
+-- two calls from the browser. The cover image is thrown away by the browser
+-- afterwards, since only it can reach the storage bucket.
+create function public.remove_book(target_book uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  list_id  uuid;
+  gone     integer;
+begin
+  select books.list, books.position into list_id, gone
+    from public.books books
+    join public.book_lists lists on lists.id = books.list
+   where books.id = target_book and lists.teacher = auth.uid();
+  if not found then
+    raise exception 'That book is not available.';
+  end if;
+
+  if exists (select 1 from public.submissions where list = list_id) then
+    raise exception 'Clear student responses before changing the book list.';
+  end if;
+
+  -- Shifting each later book down one step passes through numbers that are
+  -- still in use, so uniqueness is judged once the whole shift is finished.
+  set constraints all deferred;
+
+  delete from public.books where id = target_book;
+
+  update public.books set position = position - 1
+   where list = list_id and position > gone;
+end;
+$$;
+
 create function public.clear_responses(target_list uuid)
 returns void
 language plpgsql
@@ -518,8 +565,8 @@ begin
   select array_agg(id order by position) into book_ids
     from public.books where list = target_list;
 
-  if coalesce(array_length(book_ids, 1), 0) <> 10 then
-    raise exception 'Add all ten books before creating test responses.';
+  if coalesce(array_length(book_ids, 1), 0) < 4 then
+    raise exception 'Add at least four books before creating test responses.';
   end if;
 
   for made in 1 .. response_count loop
@@ -682,6 +729,7 @@ $$;
 revoke all on function public.new_share_token() from public;
 revoke all on function public.student_view(text) from public;
 revoke all on function public.student_submit(text, text, text, uuid[]) from public;
+revoke all on function public.remove_book(uuid) from public;
 revoke all on function public.clear_responses(uuid) from public;
 revoke all on function public.add_random_responses(uuid, integer) from public;
 revoke all on function public.save_groups(uuid, jsonb, jsonb) from public;
@@ -692,6 +740,7 @@ grant execute on function public.new_share_token() to authenticated;
 
 grant execute on function public.student_view(text) to anon, authenticated;
 grant execute on function public.student_submit(text, text, text, uuid[]) to anon, authenticated;
+grant execute on function public.remove_book(uuid) to authenticated;
 grant execute on function public.clear_responses(uuid) to authenticated;
 grant execute on function public.add_random_responses(uuid, integer) to authenticated;
 grant execute on function public.save_groups(uuid, jsonb, jsonb) to authenticated;

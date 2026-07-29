@@ -10,6 +10,8 @@ export const supabase = createClient(
 export type BookList = {
   id: string;
   name: string;
+  // A private note on the teacher's dashboard, telling one list from another.
+  description: string;
   shareToken: string;
 };
 
@@ -23,7 +25,25 @@ export type Book = {
   list?: string;
 };
 
-export const bookListColumns = "id, name, shareToken:share_token";
+export const bookListColumns = "id, name, description, shareToken:share_token";
+
+// The app has no router: the address bar decides which page is showing. Pushing
+// a URL and then raising the same event the Back button raises means both
+// directions of navigation travel one path.
+export function navigate(to: string) {
+  if (to !== window.location.pathname) history.pushState({}, "", to);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+export function studentLink(list: BookList) {
+  return `${window.location.origin}/student/${list.shareToken}`;
+}
+
+// A teacher decides how long their list is. Students rank four books, so four is
+// the point at which a list becomes usable, and thirty is where the database
+// stops accepting more.
+export const minimumBooks = 4;
+export const maximumBooks = 30;
 
 export function coverUrl(book: Book) {
   if (!book.cover) return "";
@@ -36,14 +56,27 @@ export function newCoverPath(teacherId: string) {
   return `${teacherId}/${crypto.randomUUID()}.webp`;
 }
 
+// Takes a book off its list. The database renumbers whatever came after it, so
+// the list has no gap where the book used to be. Its cover image can only go
+// once the row that pointed at it is gone.
+export async function deleteBook(book: Book) {
+  const { error: caught } = await supabase.rpc("remove_book", { target_book: book.id });
+  if (caught) throw caught;
+  if (book.cover) await supabase.storage.from("covers").remove([book.cover]);
+}
+
 // Sets up a new book list holding copies of another list's books, so a teacher
 // only types the titles, descriptions, and covers once however many classes they
 // teach. Each copy gets its own cover image file, so editing or clearing one
 // list never disturbs the other.
-export async function duplicateBookList(teacherId: string, name: string, sourceBooks: Book[]) {
+export async function duplicateBookList(
+  teacherId: string,
+  details: { name: string; description: string },
+  sourceBooks: Book[],
+) {
   const { data, error: createFailed } = await supabase
     .from("book_lists")
-    .insert({ name })
+    .insert(details)
     .select(bookListColumns)
     .single();
   if (createFailed) throw createFailed;

@@ -8,6 +8,7 @@
     listId,
     locked,
     onSaved,
+    onRemove,
   }: {
     position: number;
     book?: Book;
@@ -15,6 +16,9 @@
     listId: string;
     locked: boolean;
     onSaved: () => void;
+    // Gets rid of this card: deletes a saved book, or drops a book being added
+    // before it was ever saved.
+    onRemove: () => void | Promise<void>;
   } = $props();
 
   let editing = $state(false);
@@ -97,14 +101,15 @@
       const details = {
         teacher: teacherId,
         list: listId,
-        position,
         title: title.trim(),
         blurb: blurb.trim(),
         ...(uploadedPath ? { cover: uploadedPath } : {}),
       };
+      // A book takes its place in the list when it is first added, and keeps it
+      // through every later edit.
       const { error: saveFailed } = book
         ? await supabase.from("books").update(details).eq("id", book.id)
-        : await supabase.from("books").insert(details);
+        : await supabase.from("books").insert({ ...details, position });
       if (saveFailed) throw saveFailed;
 
       // Only once the new cover is definitely in use can the old one go.
@@ -121,6 +126,14 @@
       busy = false;
     }
   }
+
+  async function remove() {
+    if (!book) return;
+    if (!confirm(`Remove “${book.title}” from this book list? This cannot be undone.`)) return;
+    busy = true;
+    await onRemove();
+    busy = false;
+  }
 </script>
 
 <article class="editor-card" class:complete={book}>
@@ -132,9 +145,16 @@
       <h3>{book.title}</h3>
       <p>{book.blurb}</p>
     </div>
-    <button class="button subtle small" disabled={locked} onclick={() => (editing = true)}>
-      {locked ? "Locked" : "Edit"}
-    </button>
+    <div class="editor-actions">
+      <button class="button subtle small" disabled={locked || busy} onclick={() => (editing = true)}>
+        {locked ? "Locked" : "Edit"}
+      </button>
+      {#if !locked}
+        <button class="button danger small" disabled={busy} onclick={remove}>
+          {busy ? "Removing…" : "Remove"}
+        </button>
+      {/if}
+    </div>
   {:else}
     <form class="book-form" onsubmit={save}>
       <div class="cover-picker">
@@ -161,7 +181,7 @@
         {#if error}<p class="message error" role="alert">{error}</p>{/if}
         <div class="button-row">
           <button class="button primary small" disabled={busy}>{busy ? "Saving…" : "Save book"}</button>
-          {#if book}<button class="button text small" type="button" onclick={() => (editing = false)}>Cancel</button>{/if}
+          <button class="button text small" type="button" onclick={() => (book ? (editing = false) : onRemove())}>Cancel</button>
         </div>
       </div>
     </form>
