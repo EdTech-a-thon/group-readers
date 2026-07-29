@@ -49,14 +49,13 @@
 
 <main class="auth-page">
   <section class="auth-intro">
-    <a class="brand brand-light" href="/" aria-label="Book Club Builder home">
-      <span class="brand-mark">B</span>
-      <span>Book Club Builder</span>
+    <a class="brand brand-light" href="/" aria-label="Group Readers home">
+      <span class="brand-mark">G</span>
+      <span>Group Readers</span>
     </a>
     <div class="intro-copy">
-      <p class="eyebrow light">Turn choice into community</p>
-      <h1>Every great book club starts with a student’s voice.</h1>
-      <p>Create your reading list, share one simple link, and see every student’s top choices together.</p>
+      <h1>Instantly create reading groups your students will love.</h1>
+      <p>Create your reading list, share one simple link, and let every student’s book preferences shape the groups.</p>
     </div>
     <div class="book-stack" aria-hidden="true">
       <div class="book book-one">Imagine</div>

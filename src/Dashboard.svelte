@@ -130,7 +130,7 @@
 </script>
 
 <header class="topbar">
-  <a class="brand" href="/"><span class="brand-mark">B</span><span>Book Club Builder</span></a>
+  <a class="brand" href="/"><span class="brand-mark">G</span><span>Group Readers</span></a>
   <div class="teacher-menu"><span class="avatar">{username.slice(0, 1).toUpperCase()}</span><span>{username}</span><button class="text-link" onclick={onSignOut}>Sign out</button></div>
 </header>
 

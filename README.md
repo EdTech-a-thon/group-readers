@@ -1,6 +1,6 @@
-# Book Club Builder
+# Group Readers
 
-A teacher creates a private account, adds ten books, and shares an unlisted link. Students rank four books, and the teacher sees all choices in one dashboard.
+Instantly generate reading groups based on your students' book preferences. A teacher creates a private account, adds ten books, and shares an unlisted link. Students rank four books, and the teacher sees all choices in one dashboard and builds groups from them.
 
 Accounts, data, and cover images all live in a [Supabase](https://supabase.com) project.
 

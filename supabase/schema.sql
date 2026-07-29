@@ -1,4 +1,4 @@
--- Book Club Builder — database setup
+-- Group Readers — database setup
 --
 -- Run this once in your Supabase project: Dashboard → SQL Editor → New query,
 -- paste the whole file, then press Run. It creates every table, permission
@@ -138,6 +138,24 @@ $$;
 create trigger books_guard
   before insert or update or delete on public.books
   for each row execute function public.books_guard();
+
+-- ---------------------------------------------------------------------------
+-- Table privileges
+--
+-- The rules below narrow a signed-in teacher down to their own rows, but
+-- Postgres first has to be told that signed-in teachers may touch the table at
+-- all. Without these grants every query fails with "permission denied for
+-- table ...". Signed-out visitors get nothing here; the student page reaches
+-- the data only through the functions further down.
+-- ---------------------------------------------------------------------------
+
+revoke all on public.teachers, public.books, public.submissions,
+  public.grouping_plans from anon, authenticated;
+
+grant select, update on public.teachers to authenticated;
+grant select, insert, update, delete on public.books to authenticated;
+grant select on public.submissions to authenticated;
+grant select on public.grouping_plans to authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Row level security
