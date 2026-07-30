@@ -257,6 +257,34 @@ thead th { color: var(--muted); background: #f0eee8; font-size: .7rem; text-tran
 .success-card > p:not(.eyebrow), .student-error p { color: var(--muted); line-height: 1.6; }
 .success-check { width: 68px; height: 68px; display: grid; place-items: center; margin: 0 auto 1.5rem; border-radius: 50%; color: var(--green); background: var(--gold); font-size: 2rem; font-weight: 800; }
 
+/* About and Privacy: plain reading pages, same furniture as the dashboard. */
+.info-page { padding-block: 55px 90px; }
+.info-page h1 { font-size: clamp(2.3rem, 4.5vw, 3.6rem); margin-bottom: .8rem; }
+.info-lede { max-width: 640px; margin-bottom: 2.2rem; color: var(--muted); font-size: 1.08rem; line-height: 1.6; }
+.info-card { margin-bottom: 1rem; padding: 1.6rem 1.8rem; background: white; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 16px rgba(41,56,50,.04); }
+.info-card h2 { margin-bottom: .8rem; font-size: 1.5rem; }
+.info-card h3 { margin-bottom: .25rem; font: 700 1.1rem "Fraunces", serif; }
+.info-card p { max-width: 720px; color: #44534e; font-size: .95rem; line-height: 1.65; }
+.info-card p:last-of-type { margin-bottom: 0; }
+.info-card a:not(.button) { color: #a86d32; font-weight: 700; text-underline-offset: 3px; }
+.info-card .button { margin-top: 1.1rem; display: inline-block; text-decoration: none; }
+.info-card .table-wrap { margin-bottom: 1.2rem; }
+.info-card th, .info-card td { vertical-align: top; }
+.info-card tbody th { width: 30%; font-weight: 700; }
+.info-steps, .promise-list { display: grid; gap: 1rem; margin: 0 0 1.2rem; padding: 0; list-style: none; }
+.info-steps li, .promise-list li { display: grid; grid-template-columns: 28px 1fr; gap: .9rem; align-items: start; }
+.info-steps p, .promise-list span { margin: 0; color: var(--muted); font-size: .92rem; line-height: 1.6; }
+.promise-list div { display: grid; gap: .2rem; }
+.promise-list strong { font-family: "Fraunces", serif; font-size: 1.05rem; }
+.tick { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; color: var(--green); background: #dcecdf; font-weight: 800; font-size: .8rem; }
+
+.site-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .7rem 1.5rem; padding: 1.4rem max(20px, calc((100vw - 1180px)/2)); border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+.site-footer p { margin: 0; }
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 1.2rem; }
+.site-footer a { font-weight: 600; text-underline-offset: 3px; }
+.fine-links { display: inline-flex; gap: 1rem; margin-left: .5rem; }
+.fine-links a { font-weight: 700; }
+
 @media (max-width: 850px) {
   .auth-page { grid-template-columns: 1fr; }
   .auth-intro { min-height: 430px; padding: 35px 28px; }
@@ -315,4 +343,9 @@ thead th { color: var(--muted); background: #f0eee8; font-size: .7rem; text-tran
   .submit-bar { bottom: 8px; }
   .submit-bar span { display: none; }
   .submit-bar .button { padding: .8rem; }
+  .info-page { padding-block: 34px 60px; }
+  .info-card { padding: 1.2rem 1.1rem; }
+  .info-card tbody th { width: auto; }
+  .site-footer { padding: 1.2rem 12px; }
+  .fine-links { display: flex; justify-content: center; margin: .5rem 0 0; }
 }

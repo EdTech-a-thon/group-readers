@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { errorMessage, supabase } from "./lib";
+  import { errorMessage, navigate, supabase } from "./lib";
 
   let { onSignIn }: { onSignIn: () => void } = $props();
   let mode: "signin" | "signup" = $state("signin");
@@ -37,6 +37,11 @@
     } finally {
       busy = false;
     }
+  }
+
+  function openPage(event: MouseEvent, to: string) {
+    event.preventDefault();
+    navigate(to);
   }
 
   function switchMode(next: "signin" | "signup") {
@@ -104,7 +109,13 @@
           {busy ? "Please wait…" : mode === "signin" ? "Sign in" : "Create my account"}
         </button>
       </form>
-      <p class="fine-print">Your email is only used to sign you in. Students never need an account.</p>
+      <p class="fine-print">
+        Your email is only used to sign you in. Students never need an account.
+        <span class="fine-links">
+          <a href="/about" onclick={(event) => openPage(event, "/about")}>About</a>
+          <a href="/privacy" onclick={(event) => openPage(event, "/privacy")}>Privacy</a>
+        </span>
+      </p>
     </div>
   </section>
 </main>

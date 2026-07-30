@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import BookEditor from "./BookEditor.svelte";
   import GroupBuilder from "./GroupBuilder.svelte";
+  import SiteFooter from "./SiteFooter.svelte";
   import TopBar from "./TopBar.svelte";
   import {
     bookListColumns,
@@ -366,3 +367,5 @@
     {/if}
   {/if}
 </main>
+
+<SiteFooter />

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import SiteFooter from "./SiteFooter.svelte";
   import TopBar from "./TopBar.svelte";
   import {
     bookListColumns,
@@ -249,3 +250,5 @@
     </section>
   {/if}
 </main>
+
+<SiteFooter />

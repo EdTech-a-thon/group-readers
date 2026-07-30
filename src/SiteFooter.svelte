@@ -1,0 +1,22 @@
+<script lang="ts">
+  import { navigate } from "./lib";
+
+  // About and Privacy are ordinary pages of this app, so they open the same way
+  // every other link here does rather than reloading the whole site.
+  function open(event: MouseEvent, to: string) {
+    event.preventDefault();
+    navigate(to);
+  }
+</script>
+
+<footer class="site-footer">
+  <p>
+    A free classroom tool from the
+    <a href="https://edtechathon.com" target="_blank" rel="noopener noreferrer">EdTech-a-thon</a>.
+  </p>
+  <nav>
+    <a href="/about" onclick={(event) => open(event, "/about")}>About</a>
+    <a href="/privacy" onclick={(event) => open(event, "/privacy")}>Privacy</a>
+    <a href="mailto:directors@edtechathon.com?subject=Group%20Readers%20feedback">Contact</a>
+  </nav>
+</footer>

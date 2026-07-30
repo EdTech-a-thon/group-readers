@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import SiteFooter from "./SiteFooter.svelte";
   import { coverUrl, errorMessage, ordinal, supabase, type Book } from "./lib";
 
   let { token }: { token: string } = $props();
@@ -112,4 +113,5 @@
       <div class="submit-bar"><div><strong>{choices.length}/{rankedBooks} chosen</strong><span>{complete ? "Your ranking is complete." : "Keep choosing in order."}</span></div><button class="button accent large" disabled={busy || !complete}>{busy ? "Submitting…" : "Submit my choices"}</button></div>
     </form>
   </main>
+  <SiteFooter />
 {/if}

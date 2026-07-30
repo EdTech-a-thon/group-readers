@@ -8,6 +8,8 @@ Teachers keep a separate **book list** for each group of students they teach —
 
 Signing in lands on the teacher dashboard, a card for each book list showing its description, how many books it holds, how many of them each student ranks, and how many students have answered. Opening a card goes to that one list at `/list/<id>`, where its books, student choices, and groups live. Deep links work only because unknown paths fall back to `index.html` — the same rewrite the student links at `/student/<token>` already need.
 
+Two pages anyone can read sit behind the footer links: `/about` says who made this and what it promises, and `/privacy` lists everything stored about a teacher and their students. Keep the privacy page true — it names each table in `supabase/schema.sql`, so a change to what is stored belongs there too.
+
 Accounts, data, and cover images all live in a [Supabase](https://supabase.com) project.
 
 ## First-time setup

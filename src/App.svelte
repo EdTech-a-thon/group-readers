@@ -1,8 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import AboutPage from "./AboutPage.svelte";
   import Auth from "./Auth.svelte";
   import BookListPage from "./BookListPage.svelte";
   import Dashboard from "./Dashboard.svelte";
+  import PrivacyPage from "./PrivacyPage.svelte";
   import StudentRanking from "./StudentRanking.svelte";
   import { navigate, supabase } from "./lib";
 
@@ -14,6 +16,8 @@
   // lists, and one book list opened for editing.
   const studentToken = $derived(path.match(/^\/student\/([A-Za-z0-9_-]+)\/?$/)?.[1]);
   const openListId = $derived(path.match(/^\/list\/([0-9a-fA-F-]{36})\/?$/)?.[1]);
+  // Plus two anyone can read, signed in or not.
+  const infoPage = $derived(path.match(/^\/(about|privacy)\/?$/)?.[1]);
 
   onMount(() => {
     const followUrl = () => (path = window.location.pathname);
@@ -43,6 +47,10 @@
 
 {#if studentToken}
   <StudentRanking token={studentToken} />
+{:else if infoPage === "about"}
+  <AboutPage />
+{:else if infoPage === "privacy"}
+  <PrivacyPage />
 {:else if !ready}
   <main class="center-page"><div class="loader" aria-label="Loading"></div></main>
 {:else if !authenticated}
