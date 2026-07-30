@@ -17,6 +17,6 @@
   <nav>
     <a href="/about" onclick={(event) => open(event, "/about")}>About</a>
     <a href="/privacy" onclick={(event) => open(event, "/privacy")}>Privacy</a>
-    <a href="mailto:directors@edtechathon.com?subject=Group%20Readers%20feedback">Contact</a>
+    <a href="mailto:support@groupreaders.com?subject=Group%20Readers%20Support">Support</a>
   </nav>
 </footer>

@@ -5,7 +5,7 @@
 
 <InfoPage
   title="About"
-  lede="Group Readers turns a class's book preferences into reading groups, so every student starts a book they chose themselves."
+  lede="Group Readers turns a class's book preferences into reading groups, so teachers can save time putting students into groups."
 >
   <section class="info-card">
     <h2>From the EdTech-a-thon</h2>
@@ -77,8 +77,8 @@
         <div>
           <strong>Zero tracking.</strong>
           <span>
-            No analytics, no third-party trackers, and nothing about your
-            students sold or shared. See our
+            No third-party trackers, and nothing about your students sold or
+            shared. We count visits anonymously and that is all. See our
             <a
               href="/privacy"
               onclick={(event) => {
@@ -98,8 +98,8 @@
       We'd love to hear from you. Tell us what's working, what's not, or pitch us
       an idea for a tool you wish existed. We're here to help.
     </p>
-    <a class="button primary" href="mailto:directors@edtechathon.com?subject=Group%20Readers%20feedback">
-      Email directors@edtechathon.com
+    <a class="button primary" href="mailto:support@groupreaders.com?subject=Group%20Readers%20feedback">
+      Email support@groupreaders.com
     </a>
   </section>
 </InfoPage>

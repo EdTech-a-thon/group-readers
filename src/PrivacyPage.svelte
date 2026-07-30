@@ -70,10 +70,16 @@
       <li>
         <span class="tick">✓</span>
         <div>
-          <strong>No analytics or tracking.</strong>
+          <strong>No tracking or advertising.</strong>
           <span>
-            We run no analytics, no advertising, and no third-party tracking
-            scripts. Nothing follows you or your students to other sites.
+            We run no advertising and no third-party tracking scripts. The one
+            thing we do measure is non-identifiable usage: Cloudflare Web Analytics
+            anonymously counts visits, so we can tell how much Group Readers is
+            being used in classrooms. It is cookieless, does not fingerprint
+            visitors, and does not follow anyone across other sites — see
+            Cloudflare's
+            <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">privacy policy</a>
+            for details.
           </span>
         </div>
       </li>
@@ -87,32 +93,7 @@
           </span>
         </div>
       </li>
-      <li>
-        <span class="tick">✓</span>
-        <div>
-          <strong>No email from us.</strong>
-          <span>
-            Your address signs you in, that's all. Group Readers sends no
-            newsletters, notifications, or marketing.
-          </span>
-        </div>
-      </li>
     </ul>
-  </section>
-
-  <section class="info-card">
-    <h2>Where it lives</h2>
-    <p>
-      Accounts, book lists, responses, and cover images are stored with
-      <a href="https://supabase.com/privacy" target="_blank" rel="noopener noreferrer">Supabase</a>,
-      and the site itself is served by
-      <a href="https://vercel.com/legal/privacy-policy" target="_blank" rel="noopener noreferrer">Vercel</a>,
-      whose servers keep the usual short-lived request logs. Our typefaces are
-      requested from
-      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google Fonts</a>
-      when a page loads. These providers host Group Readers for us; none of them
-      are given your data for their own purposes.
-    </p>
   </section>
 
   <section class="info-card">
@@ -134,8 +115,8 @@
   <section class="info-card">
     <h2>Questions or concerns?</h2>
     <p>Ask us anything about this page, or about the data we hold for your class.</p>
-    <a class="button primary" href="mailto:directors@edtechathon.com?subject=Group%20Readers%20privacy">
-      Email directors@edtechathon.com
+    <a class="button primary" href="mailto:support@groupreaders.com?subject=Group%20Readers%20privacy">
+      Email support@groupreaders.com
     </a>
   </section>
 </InfoPage>
