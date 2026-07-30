@@ -366,6 +366,7 @@ set search_path = public, extensions
 as $$
 declare
   list_id    uuid;
+  list_name  text;
   owner_name text;
   wanted     integer;
   titles     jsonb;
@@ -374,8 +375,8 @@ begin
     raise exception 'This book club link is not valid.';
   end if;
 
-  select lists.id, teacher.username, lists.ranked_books
-    into list_id, owner_name, wanted
+  select lists.id, lists.name, teacher.username, lists.ranked_books
+    into list_id, list_name, owner_name, wanted
     from public.book_lists lists
     join public.teachers teacher on teacher.id = lists.teacher
    where lists.share_token = token;
@@ -402,7 +403,9 @@ begin
     raise exception 'This book club is not ready yet.';
   end if;
 
-  return jsonb_build_object('teacher', owner_name, 'rankedBooks', wanted, 'books', titles);
+  -- The list name goes back with the books so a student can see at a glance
+  -- that the link they opened is the one meant for their class.
+  return jsonb_build_object('teacher', owner_name, 'name', list_name, 'rankedBooks', wanted, 'books', titles);
 end;
 $$;
 

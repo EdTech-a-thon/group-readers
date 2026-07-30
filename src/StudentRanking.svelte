@@ -8,6 +8,7 @@
   // never asks for more places than the ranking has.
   let rankedBooks = $state(4);
   let teacher = $state("");
+  let listName = $state("");
   let firstName = $state("");
   let lastInitial = $state("");
   let choices = $state<string[]>([]);
@@ -23,6 +24,7 @@
       books = data.books;
       rankedBooks = data.rankedBooks;
       teacher = data.teacher;
+      listName = data.name;
     } catch (caught) {
       error = errorMessage(caught);
     } finally {
@@ -73,14 +75,14 @@
   <main class="center-page student-bg"><section class="student-error"><h1>We couldn’t open this book club.</h1><p>{error}</p><p>Ask your teacher to check the link and try again.</p></section></main>
 {:else if submitted}
   <main class="center-page student-bg">
-    <section class="success-card"><div class="success-check">✓</div><p class="eyebrow">Choices submitted</p><h1>Your reading voice is in!</h1><p>Your teacher can now see your ranked books. You can close this page, or submit again if you need to change your choices.</p><button class="button primary" onclick={() => (submitted = false)}>Change my choices</button></section>
+    <section class="success-card"><div class="success-check">✓</div><p class="eyebrow">Choices submitted</p><h1>Your reading voice is in!</h1><p>Your teacher can now see your ranked books for {listName}. You can close this page, or submit again if you need to change your choices.</p><button class="button primary" onclick={() => (submitted = false)}>Change my choices</button></section>
   </main>
 {:else}
   <main class="student-page">
     <section class="student-hero shell narrow">
-      <p class="eyebrow light">{teacher}’s book club</p>
-      <h1>Which stories are calling you?</h1>
-      <p>Pick {rankedBooks} books in order. The first book you tap is your #1 choice.</p>
+      <div class="hero-labels"><p class="eyebrow light">{teacher}’s book club</p><span class="list-chip">{listName}</span></div>
+      <h1>Which books do you want to read?</h1>
+      <p class="hero-lede">Pick {rankedBooks} books in order. The first book you tap is your #1 choice.</p>
       <div class="ranking-progress" aria-label={`${choices.length} of ${rankedBooks} books chosen`}>
         {#each places as rank}<span class:filled={choices[rank]}>{choices[rank] ? rank + 1 : ""}</span>{/each}
         <strong>{complete ? "Ready to submit" : `${rankedBooks - choices.length} more to choose`}</strong>
