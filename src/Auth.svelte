@@ -1,5 +1,6 @@
 <script lang="ts">
   import { errorMessage, navigate, supabase } from "./lib";
+  import logo from "./assets/logo.svg";
 
   let { onSignIn }: { onSignIn: () => void } = $props();
   let mode: "signin" | "signup" = $state("signin");
@@ -67,6 +68,15 @@
       <div class="book book-two">Wonder</div>
       <div class="book book-three">Belong</div>
     </div>
+    <a
+      class="intro-credit"
+      href="https://edtechathon.com"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <img class="edtech-logo small" src={logo} alt="" />
+      <span>Built by the EdTech-a-thon</span>
+    </a>
   </section>
 
   <section class="auth-panel">

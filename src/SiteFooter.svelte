@@ -1,5 +1,6 @@
 <script lang="ts">
   import { navigate } from "./lib";
+  import logo from "./assets/logo.svg";
 
   // About and Privacy are ordinary pages of this app, so they open the same way
   // every other link here does rather than reloading the whole site.
@@ -10,9 +11,12 @@
 </script>
 
 <footer class="site-footer">
-  <p>
-    A free classroom tool from the
-    <a href="https://edtechathon.com" target="_blank" rel="noopener noreferrer">EdTech-a-thon</a>.
+  <p class="footer-credit">
+    <img class="edtech-logo small" src={logo} alt="" />
+    <span>
+      A free classroom tool from the
+      <a href="https://edtechathon.com" target="_blank" rel="noopener noreferrer">EdTech-a-thon</a>.
+    </span>
   </p>
   <nav>
     <a href="/about" onclick={(event) => open(event, "/about")}>About</a>

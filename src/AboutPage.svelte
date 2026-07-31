@@ -1,6 +1,8 @@
 <script lang="ts">
   import InfoPage from "./InfoPage.svelte";
   import { navigate } from "./lib";
+  import logo from "./assets/logo.svg";
+  import participants from "./assets/2026participants.jpeg";
 </script>
 
 <InfoPage
@@ -8,7 +10,10 @@
   lede="Group Readers turns a class's book preferences into reading groups, so teachers can save time putting students into groups."
 >
   <section class="info-card">
-    <h2>From the EdTech-a-thon</h2>
+    <div class="card-heading">
+      <img class="edtech-logo" src={logo} alt="" />
+      <h2>From the EdTech-a-thon</h2>
+    </div>
     <p>
       Group Readers is a project from the
       <a href="https://edtechathon.com" target="_blank" rel="noopener noreferrer">EdTech-a-thon</a>,
@@ -16,6 +21,10 @@
       who we are and what else we're building at
       <a href="https://edtechathon.com" target="_blank" rel="noopener noreferrer">edtechathon.com</a>.
     </p>
+    <figure class="polaroid">
+      <img src={participants} alt="Everyone who took part in the 2026 EdTech-a-thon." />
+      <figcaption>The 2026 EdTech-a-thon</figcaption>
+    </figure>
   </section>
 
   <section class="info-card">
@@ -77,7 +86,7 @@
         <div>
           <strong>Zero tracking.</strong>
           <span>
-            No third-party trackers, and nothing about your students sold or
+            No third-party trackers, and nothing about your students is sold or
             shared. We count visits anonymously and that is all. See our
             <a
               href="/privacy"
