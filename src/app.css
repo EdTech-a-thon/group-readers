@@ -213,6 +213,10 @@ input:focus, textarea:focus { border-color: var(--green-2); box-shadow: 0 0 0 3p
 table { width: 100%; border-collapse: collapse; text-align: left; }
 th, td { padding: 1rem; border-bottom: 1px solid #e7e5de; font-size: .84rem; }
 thead th { color: var(--muted); background: #f0eee8; font-size: .7rem; text-transform: uppercase; letter-spacing: .07em; }
+/* The per-student delete button sits in the last column, kept narrow so the
+   choices themselves keep the width. */
+.choices-table thead th:last-child, .choices-table td.row-action { text-align: right; }
+.choices-table td.row-action { width: 1%; padding: .5rem 1rem; white-space: nowrap; }
 
 .student-header { height: 72px; display: flex; align-items: center; padding: 0 max(20px, calc((100vw - 1000px)/2)); background: var(--green); }
 .student-bg { color: white; background: var(--green); }

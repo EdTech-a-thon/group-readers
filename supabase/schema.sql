@@ -30,6 +30,7 @@
 -- drop function if exists public.remove_book(uuid);
 -- drop function if exists public.clear_responses();
 -- drop function if exists public.clear_responses(uuid);
+-- drop function if exists public.remove_response(uuid);
 -- drop function if exists public.add_random_responses(integer);
 -- drop function if exists public.add_random_responses(uuid, integer);
 -- drop function if exists public.save_groups(jsonb, jsonb);
@@ -551,6 +552,32 @@ begin
 end;
 $$;
 
+-- Takes one student's ranking off a list, for when somebody answered twice under
+-- slightly different names or has left the class. Any saved grouping for that
+-- list placed the student it removes, so it goes the same way it does when a new
+-- response arrives.
+create function public.remove_response(target_response uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  list_id uuid;
+begin
+  select response.list into list_id
+    from public.submissions response
+    join public.book_lists lists on lists.id = response.list
+   where response.id = target_response and lists.teacher = auth.uid();
+  if not found then
+    raise exception 'That student response is not available.';
+  end if;
+
+  delete from public.submissions where id = target_response;
+  delete from public.grouping_plans where list = list_id;
+end;
+$$;
+
 -- Fills the list with make-believe responses so a teacher can try out grouping
 -- before their students have answered.
 create function public.add_random_responses(target_list uuid, response_count integer)
@@ -767,6 +794,7 @@ revoke all on function public.student_view(text) from public;
 revoke all on function public.student_submit(text, text, text, uuid[]) from public;
 revoke all on function public.remove_book(uuid) from public;
 revoke all on function public.clear_responses(uuid) from public;
+revoke all on function public.remove_response(uuid) from public;
 revoke all on function public.add_random_responses(uuid, integer) from public;
 revoke all on function public.save_groups(uuid, jsonb, jsonb) from public;
 
@@ -778,5 +806,6 @@ grant execute on function public.student_view(text) to anon, authenticated;
 grant execute on function public.student_submit(text, text, text, uuid[]) to anon, authenticated;
 grant execute on function public.remove_book(uuid) to authenticated;
 grant execute on function public.clear_responses(uuid) to authenticated;
+grant execute on function public.remove_response(uuid) to authenticated;
 grant execute on function public.add_random_responses(uuid, integer) to authenticated;
 grant execute on function public.save_groups(uuid, jsonb, jsonb) to authenticated;

@@ -105,9 +105,9 @@
       address too, so use book covers rather than photos of anything private.
     </p>
     <p>
-      You stay in control of the rest. Clearing a list's responses deletes them,
-      and deleting a book list deletes its books, its responses, and its saved
-      groups for good. If you'd like your whole account and everything in it
+      You stay in control of the rest. Deleting a single student's response
+      removes it, clearing a list's responses deletes them all, and deleting a
+      book list deletes its books, its responses, and its saved groups for good. If you'd like your whole account and everything in it
       removed, email us and we'll take care of it.
     </p>
   </section>

@@ -33,6 +33,8 @@
   let error = $state("");
   let copied = $state(false);
   let clearing = $state(false);
+  // The id of the one response being deleted, so only its own button says so.
+  let removingResponse = $state("");
   let randomCount = $state(10);
   let addingRandom = $state(false);
   let clearingBooks = $state(false);
@@ -159,6 +161,26 @@
       error = errorMessage(caught);
     } finally {
       clearing = false;
+    }
+  }
+
+  // Removing one student's answer leaves the rest of the class untouched, but it
+  // does throw away any saved grouping, since that grouping placed them.
+  async function removeResponse(submission: any) {
+    const student = `${submission.firstName} ${submission.lastInitial}.`;
+    if (!confirm(`Delete ${student}'s choices for “${list?.name}”? This cannot be undone.`)) return;
+    removingResponse = submission.id;
+    error = "";
+    try {
+      const { error: caught } = await supabase.rpc("remove_response", {
+        target_response: submission.id,
+      });
+      if (caught) throw caught;
+    } catch (caught) {
+      error = errorMessage(caught);
+    } finally {
+      removingResponse = "";
+      await load();
     }
   }
 
@@ -352,11 +374,22 @@
           {/each}
         </section>
         <div class="table-wrap">
-          <table>
-            <thead><tr><th>Student</th>{#each places as rank}<th>{ordinal(rank + 1)} choice</th>{/each}</tr></thead>
+          <table class="choices-table">
+            <thead><tr><th>Student</th>{#each places as rank}<th>{ordinal(rank + 1)} choice</th>{/each}<th>Delete</th></tr></thead>
             <tbody>
-              {#each submissions as submission}
-                <tr><th>{submission.firstName} {submission.lastInitial}.</th>{#each places as rank}<td>{choiceBook(submission, rank)?.title || "—"}</td>{/each}</tr>
+              {#each submissions as submission (submission.id)}
+                <tr>
+                  <th>{submission.firstName} {submission.lastInitial}.</th>
+                  {#each places as rank}<td>{choiceBook(submission, rank)?.title || "—"}</td>{/each}
+                  <td class="row-action">
+                    <button
+                      class="button danger subtle small"
+                      disabled={clearing || addingRandom || removingResponse === submission.id}
+                      aria-label={`Delete ${submission.firstName} ${submission.lastInitial}.'s choices`}
+                      onclick={() => removeResponse(submission)}
+                    >{removingResponse === submission.id ? "Deleting…" : "Delete"}</button>
+                  </td>
+                </tr>
               {/each}
             </tbody>
           </table>
