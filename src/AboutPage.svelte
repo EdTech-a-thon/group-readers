@@ -45,7 +45,7 @@
         <div>
           <h3>Share one link</h3>
           <p>
-            Each list has its own unlisted student link. Students open it, put
+            Each list has its own student link. Students open it, put
             their favourites in order, and submit. No account, no password.
           </p>
         </div>
